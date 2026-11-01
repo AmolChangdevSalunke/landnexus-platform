@@ -2,6 +2,7 @@ package com.landnexus.shared.exception;
 
 import com.landnexus.shared.response.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,13 +10,13 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-import java.time.Instant;
 
 /** Converts exceptions into consistent ApiError responses. No internal details leak to clients. */
 @RestControllerAdvice
@@ -36,6 +37,22 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidRequestException.class)
     public ResponseEntity<ApiError> handleInvalidRequest(InvalidRequestException ex, HttpServletRequest req) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), req, List.of());
+    }
+
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public ResponseEntity<ApiError> handleAuthenticationFailed(AuthenticationFailedException ex, HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), req, List.of());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiError> handleAuthentication(AuthenticationException ex, HttpServletRequest req) {
+        return build(HttpStatus.UNAUTHORIZED, "Authentication is required", req, List.of());
+    }
+
+    /** Thrown by @PreAuthorize and by service-level rules (e.g. only a SUPER_ADMIN may grant SUPER_ADMIN). */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex, HttpServletRequest req) {
+        return build(HttpStatus.FORBIDDEN, "You do not have permission to perform this action", req, List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -1,13 +1,27 @@
 # LandNexus - Administration module smoke test (run while the backend is running on port 8080).
 # It creates synthetic TEST records with a random suffix, so it can be re-run safely.
-param([string]$BaseUrl = "http://localhost:8080/api/v1/administration")
+param(
+    [string]$BaseUrl = "http://localhost:8080/api/v1/administration",
+    [string]$AuthUrl = "http://localhost:8080/api/v1/auth",
+    [string]$AdminUser = $env:LANDNEXUS_ADMIN_USERNAME,
+    [string]$AdminPassword = $env:LANDNEXUS_ADMIN_PASSWORD
+)
+
+if (-not $AdminUser -or -not $AdminPassword) {
+    Write-Host "Set LANDNEXUS_ADMIN_USERNAME and LANDNEXUS_ADMIN_PASSWORD (or pass -AdminUser / -AdminPassword)."
+    exit 1
+}
+$login = Invoke-RestMethod -Method Post -Uri "$AuthUrl/login" -ContentType "application/json" `
+    -Body (@{ username = $AdminUser; password = $AdminPassword } | ConvertTo-Json)
+$script:Token = $login.accessToken
 
 $suffix = Get-Random -Maximum 99999
 
 function Invoke-Api {
     param([string]$Method, [string]$Path, $Body)
     try {
-        $params = @{ Method = $Method; Uri = "$BaseUrl$Path"; ContentType = "application/json" }
+        $params = @{ Method = $Method; Uri = "$BaseUrl$Path"; ContentType = "application/json";
+                     Headers = @{ Authorization = "Bearer $script:Token" } }
         if ($null -ne $Body) { $params.Body = ($Body | ConvertTo-Json) }
         $data = Invoke-RestMethod @params
         return @{ Status = "OK"; Data = $data }

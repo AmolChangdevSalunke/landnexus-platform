@@ -1,13 +1,13 @@
 # Administration Module - Slice 1 (Master Data)
 
-Status: **implemented, not yet verified on the project machine** until `mvnw clean verify` and the smoke test have been run (record results in `PROJECT_STATUS.md`).
+Status: implemented and verified in slice 1 (88 tests, smoke test 13/13). Protected by permissions since slice 2a.
 
 ## Scope of this slice
 Ministries, Departments, States, Divisions, Districts, Talukas, Villages.
 
 ## Not in this slice (next slices)
-Users, Roles, Permissions, JWT/refresh tokens, geographic access control, login history, audit events.
-**All endpoints below are open (no authentication) until the security slice is added.** Do not expose this build outside the local machine.
+Geographic access control, login history, audit events (see `SECURITY_AND_AUTH.md` for what slice 2a added: users, roles, permissions, JWT login).
+**All endpoints below now require a valid access token and the permission shown in `SECURITY_AND_AUTH.md`.**
 
 ## Package layout (`com.landnexus.administration`)
 | Package | Contents |

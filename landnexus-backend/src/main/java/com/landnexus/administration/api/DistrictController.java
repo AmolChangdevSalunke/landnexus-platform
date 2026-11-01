@@ -8,6 +8,7 @@ import com.landnexus.shared.pagination.PageResponse;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ public class DistrictController {
         this.service = service;
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_READ')")
     @GetMapping
     public PageResponse<DistrictResponse> list(
             @RequestParam(required = false) UUID stateId,
@@ -37,27 +39,32 @@ public class DistrictController {
         return service.list(stateId, page, size);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_READ')")
     @GetMapping("/{id}")
     public DistrictResponse get(@PathVariable UUID id) {
         return service.get(id);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public DistrictResponse create(@Valid @RequestBody DistrictRequest request) {
         return service.create(request);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PutMapping("/{id}")
     public DistrictResponse update(@PathVariable UUID id, @Valid @RequestBody DistrictRequest request) {
         return service.update(id, request);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PostMapping("/{id}/activate")
     public DistrictResponse activate(@PathVariable UUID id) {
         return service.setStatus(id, RecordStatus.ACTIVE);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PostMapping("/{id}/deactivate")
     public DistrictResponse deactivate(@PathVariable UUID id) {
         return service.setStatus(id, RecordStatus.INACTIVE);

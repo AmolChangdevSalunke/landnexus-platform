@@ -8,6 +8,7 @@ import com.landnexus.shared.pagination.PageResponse;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ public class VillageController {
         this.service = service;
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_READ')")
     @GetMapping
     public PageResponse<VillageResponse> list(
             @RequestParam(required = false) UUID talukaId,
@@ -37,27 +39,32 @@ public class VillageController {
         return service.list(talukaId, page, size);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_READ')")
     @GetMapping("/{id}")
     public VillageResponse get(@PathVariable UUID id) {
         return service.get(id);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public VillageResponse create(@Valid @RequestBody VillageRequest request) {
         return service.create(request);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PutMapping("/{id}")
     public VillageResponse update(@PathVariable UUID id, @Valid @RequestBody VillageRequest request) {
         return service.update(id, request);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PostMapping("/{id}/activate")
     public VillageResponse activate(@PathVariable UUID id) {
         return service.setStatus(id, RecordStatus.ACTIVE);
     }
 
+    @PreAuthorize("hasAuthority('MASTER_DATA_WRITE')")
     @PostMapping("/{id}/deactivate")
     public VillageResponse deactivate(@PathVariable UUID id) {
         return service.setStatus(id, RecordStatus.INACTIVE);
