@@ -1,0 +1,21 @@
+# IDE
+.idea/
+.vscode/
+
+# Build output and dependencies
+target/
+node_modules/
+dist/
+
+# Secrets (never commit)
+.env
+.env.local
+*.pem
+*.key
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Uploaded files (secure storage, added later)
+uploads/
