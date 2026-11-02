@@ -7,6 +7,7 @@ import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.domain.Taluka;
 import com.landnexus.administration.infrastructure.DistrictRepository;
 import com.landnexus.administration.infrastructure.TalukaRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import com.landnexus.shared.pagination.PageParams;
@@ -24,10 +25,12 @@ public class TalukaService {
 
     private final TalukaRepository repository;
     private final DistrictRepository districts;
+    private final AuditService audit;
 
-    public TalukaService(TalukaRepository repository, DistrictRepository districts) {
+    public TalukaService(TalukaRepository repository, DistrictRepository districts, AuditService audit) {
         this.repository = repository;
         this.districts = districts;
+        this.audit = audit;
     }
 
     public PageResponse<TalukaResponse> list(UUID districtId, int page, int size) {
@@ -51,7 +54,9 @@ public class TalukaService {
         }
         Taluka entity = new Taluka();
         apply(entity, request, code, district);
-        return TalukaResponse.from(repository.saveAndFlush(entity));
+        Taluka saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "Taluka", saved.getId(), describe(saved));
+        return TalukaResponse.from(saved);
     }
 
     @Transactional
@@ -62,21 +67,30 @@ public class TalukaService {
         if (repository.existsByDistrict_IdAndCodeAndIdNot(district.getId(), code, id)) {
             throw new DuplicateResourceException("Taluka code already exists in the selected district: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code, district);
-        return TalukaResponse.from(repository.saveAndFlush(entity));
+        Taluka saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "Taluka", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return TalukaResponse.from(saved);
     }
 
     @Transactional
     public TalukaResponse setStatus(UUID id, RecordStatus status) {
         Taluka entity = find(id);
         entity.setStatus(status);
-        return TalukaResponse.from(repository.saveAndFlush(entity));
+        Taluka saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "Taluka", saved.getId(), describe(saved));
+        return TalukaResponse.from(saved);
     }
 
     private void apply(Taluka entity, TalukaRequest request, String code, District district) {
         entity.setCode(code);
         entity.setName(TextNormalizer.name(request.name()));
         entity.setDistrict(district);
+    }
+
+    private static String describe(Taluka e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus() + ", districtId=" + (e.getDistrict() == null ? null : e.getDistrict().getId());
     }
 
     private Taluka find(UUID id) {

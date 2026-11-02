@@ -8,6 +8,7 @@ import com.landnexus.administration.domain.Taluka;
 import com.landnexus.administration.domain.Village;
 import com.landnexus.administration.infrastructure.TalukaRepository;
 import com.landnexus.administration.infrastructure.VillageRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import java.util.Optional;
@@ -22,6 +23,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.when;
 class VillageServiceTest {
 
     @Mock private VillageRepository repository;
+    @Mock private AuditService audit;
     @Mock private TalukaRepository talukas;
 
     @InjectMocks
@@ -48,6 +52,7 @@ class VillageServiceTest {
         assertThat(response.name()).isEqualTo("Sample Name");
         assertThat(response.status()).isEqualTo(RecordStatus.ACTIVE);
         assertThat(response.talukaId()).isEqualTo(talukaId);
+        verify(audit).record(eq("CREATE"), eq("Village"), any(), anyString());
     }
 
     @Test
@@ -59,6 +64,7 @@ class VillageServiceTest {
         assertThatThrownBy(() -> service.create(new VillageRequest("  abc ", "  Sample   Name ", talukaId)))
                 .isInstanceOf(DuplicateResourceException.class);
         verify(repository, never()).saveAndFlush(any());
+        verify(audit, never()).record(any(), any(), any(), any());
     }
 
     @Test
@@ -89,6 +95,7 @@ class VillageServiceTest {
         VillageResponse response = service.setStatus(id, RecordStatus.INACTIVE);
 
         assertThat(response.status()).isEqualTo(RecordStatus.INACTIVE);
+        verify(audit).record(eq("DEACTIVATE"), eq("Village"), any(), anyString());
     }
 
     private static <T> T withId(T entity, UUID id) {

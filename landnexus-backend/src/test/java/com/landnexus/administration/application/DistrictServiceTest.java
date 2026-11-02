@@ -10,6 +10,7 @@ import com.landnexus.administration.domain.State;
 import com.landnexus.administration.infrastructure.DistrictRepository;
 import com.landnexus.administration.infrastructure.DivisionRepository;
 import com.landnexus.administration.infrastructure.StateRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.InvalidRequestException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
@@ -25,6 +26,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,6 +36,7 @@ import static org.mockito.Mockito.when;
 class DistrictServiceTest {
 
     @Mock private DistrictRepository repository;
+    @Mock private AuditService audit;
     @Mock private StateRepository states;
     @Mock private DivisionRepository divisions;
 
@@ -52,6 +56,7 @@ class DistrictServiceTest {
         assertThat(response.name()).isEqualTo("Sample Name");
         assertThat(response.status()).isEqualTo(RecordStatus.ACTIVE);
         assertThat(response.stateId()).isEqualTo(stateId);
+        verify(audit).record(eq("CREATE"), eq("District"), any(), anyString());
     }
 
     @Test
@@ -63,6 +68,7 @@ class DistrictServiceTest {
         assertThatThrownBy(() -> service.create(new DistrictRequest("  abc ", "  Sample   Name ", stateId, null)))
                 .isInstanceOf(DuplicateResourceException.class);
         verify(repository, never()).saveAndFlush(any());
+        verify(audit, never()).record(any(), any(), any(), any());
     }
 
     @Test
@@ -107,6 +113,7 @@ class DistrictServiceTest {
         DistrictResponse response = service.setStatus(id, RecordStatus.INACTIVE);
 
         assertThat(response.status()).isEqualTo(RecordStatus.INACTIVE);
+        verify(audit).record(eq("DEACTIVATE"), eq("District"), any(), anyString());
     }
 
     private static <T> T withId(T entity, UUID id) {

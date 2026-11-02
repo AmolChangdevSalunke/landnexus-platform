@@ -9,6 +9,7 @@ import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RefreshTokenRepository;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.InvalidRequestException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
@@ -42,14 +43,16 @@ public class UserService {
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
+    private final AuditService audit;
 
     public UserService(UserAccountRepository users, RoleRepository roles, RefreshTokenRepository refreshTokens,
-                       PasswordEncoder passwordEncoder, Clock clock) {
+                       PasswordEncoder passwordEncoder, Clock clock, AuditService audit) {
         this.users = users;
         this.roles = roles;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
+        this.audit = audit;
     }
 
     public PageResponse<UserResponse> list(int page, int size) {
@@ -89,7 +92,10 @@ public class UserService {
         user.getRoles().addAll(assigned);
         user.setCreatedBy(actor.username());
         user.setUpdatedBy(actor.username());
-        return UserResponse.from(users.saveAndFlush(user));
+        UserAccount saved = users.saveAndFlush(user);
+        audit.record("CREATE", "UserAccount", saved.getId(),
+                "username=" + username + ", email=" + email + ", roles=" + saved.roleCodes());
+        return UserResponse.from(saved);
     }
 
     @Transactional
@@ -97,10 +103,14 @@ public class UserService {
         UserAccount user = find(id);
         guardTarget(user, actor);
         Set<Role> assigned = resolveRoles(request.roles(), actor);
+        Set<String> before = user.roleCodes();
         user.getRoles().clear();
         user.getRoles().addAll(assigned);
         user.setUpdatedBy(actor.username());
-        return UserResponse.from(users.saveAndFlush(user));
+        UserAccount saved = users.saveAndFlush(user);
+        audit.record("UPDATE_ROLES", "UserAccount", id,
+                "username=" + saved.getUsername() + ", roles: " + before + " -> " + saved.roleCodes());
+        return UserResponse.from(saved);
     }
 
     @Transactional
@@ -116,6 +126,7 @@ public class UserService {
         if (!enabled) {
             refreshTokens.revokeAllForUser(id, clock.instant());
         }
+        audit.record(enabled ? "ENABLE" : "DISABLE", "UserAccount", id, "username=" + saved.getUsername());
         return UserResponse.from(saved);
     }
 

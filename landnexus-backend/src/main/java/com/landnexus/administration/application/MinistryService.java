@@ -5,6 +5,7 @@ import com.landnexus.administration.api.dto.MinistryResponse;
 import com.landnexus.administration.domain.Ministry;
 import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.infrastructure.MinistryRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import com.landnexus.shared.pagination.PageParams;
@@ -21,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class MinistryService {
 
     private final MinistryRepository repository;
+    private final AuditService audit;
 
-    public MinistryService(MinistryRepository repository) {
+    public MinistryService(MinistryRepository repository, AuditService audit) {
         this.repository = repository;
+        this.audit = audit;
     }
 
     public PageResponse<MinistryResponse> list(int page, int size) {
@@ -44,7 +47,9 @@ public class MinistryService {
         }
         Ministry entity = new Ministry();
         apply(entity, request, code);
-        return MinistryResponse.from(repository.saveAndFlush(entity));
+        Ministry saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "Ministry", saved.getId(), describe(saved));
+        return MinistryResponse.from(saved);
     }
 
     @Transactional
@@ -54,20 +59,29 @@ public class MinistryService {
         if (repository.existsByCodeAndIdNot(code, id)) {
             throw new DuplicateResourceException("Ministry code already exists: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code);
-        return MinistryResponse.from(repository.saveAndFlush(entity));
+        Ministry saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "Ministry", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return MinistryResponse.from(saved);
     }
 
     @Transactional
     public MinistryResponse setStatus(UUID id, RecordStatus status) {
         Ministry entity = find(id);
         entity.setStatus(status);
-        return MinistryResponse.from(repository.saveAndFlush(entity));
+        Ministry saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "Ministry", saved.getId(), describe(saved));
+        return MinistryResponse.from(saved);
     }
 
     private void apply(Ministry entity, MinistryRequest request, String code) {
         entity.setCode(code);
         entity.setName(TextNormalizer.name(request.name()));
+    }
+
+    private static String describe(Ministry e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus();
     }
 
     private Ministry find(UUID id) {

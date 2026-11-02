@@ -3,6 +3,8 @@ package com.landnexus.administration.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +17,7 @@ import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RefreshTokenRepository;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.InvalidRequestException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
@@ -45,6 +48,7 @@ class UserServiceTest {
     @Mock private RoleRepository roles;
     @Mock private RefreshTokenRepository refreshTokens;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private AuditService audit;
 
     private UserService service;
 
@@ -53,7 +57,7 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserService(users, roles, refreshTokens, passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new UserService(users, roles, refreshTokens, passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC), audit);
     }
 
     private UserCreateRequest request(String password, String... roleCodes) {
@@ -150,6 +154,7 @@ class UserServiceTest {
         assertThat(saved.getValue().getCreatedBy()).isEqualTo("central");
         assertThat(response.enabled()).isTrue();
         assertThat(response.roles()).containsExactly("AUDITOR");
+        verify(audit).record(eq("CREATE"), eq("UserAccount"), any(), anyString());
     }
 
     @Test
@@ -196,6 +201,7 @@ class UserServiceTest {
 
         assertThat(response.enabled()).isFalse();
         verify(refreshTokens).revokeAllForUser(id, NOW);
+        verify(audit).record(eq("DISABLE"), eq("UserAccount"), eq(id), anyString());
     }
 
     @Test

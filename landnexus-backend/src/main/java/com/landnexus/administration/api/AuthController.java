@@ -5,7 +5,9 @@ import com.landnexus.administration.api.dto.LoginRequest;
 import com.landnexus.administration.api.dto.RefreshTokenRequest;
 import com.landnexus.administration.api.dto.TokenResponse;
 import com.landnexus.administration.application.AuthService;
+import com.landnexus.shared.security.ClientInfo;
 import com.landnexus.shared.security.CurrentActor;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -28,8 +30,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public TokenResponse login(@Valid @RequestBody LoginRequest request) {
-        return service.login(request);
+    public TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        ClientInfo client = new ClientInfo(http.getRemoteAddr(), http.getHeader("User-Agent"));
+        return service.login(request, client);
     }
 
     @PostMapping("/refresh")

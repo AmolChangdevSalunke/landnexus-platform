@@ -6,6 +6,7 @@ import com.landnexus.administration.application.MinistryService;
 import com.landnexus.administration.domain.Ministry;
 import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.infrastructure.MinistryRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import java.util.Optional;
@@ -20,6 +21,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,6 +31,7 @@ import static org.mockito.Mockito.when;
 class MinistryServiceTest {
 
     @Mock private MinistryRepository repository;
+    @Mock private AuditService audit;
 
     @InjectMocks
     private MinistryService service;
@@ -42,6 +46,7 @@ class MinistryServiceTest {
         assertThat(response.code()).isEqualTo("ABC");
         assertThat(response.name()).isEqualTo("Sample Name");
         assertThat(response.status()).isEqualTo(RecordStatus.ACTIVE);
+        verify(audit).record(eq("CREATE"), eq("Ministry"), any(), anyString());
     }
 
     @Test
@@ -51,6 +56,7 @@ class MinistryServiceTest {
         assertThatThrownBy(() -> service.create(new MinistryRequest("  abc ", "  Sample   Name ")))
                 .isInstanceOf(DuplicateResourceException.class);
         verify(repository, never()).saveAndFlush(any());
+        verify(audit, never()).record(any(), any(), any(), any());
     }
 
     @Test
@@ -71,6 +77,7 @@ class MinistryServiceTest {
         MinistryResponse response = service.setStatus(id, RecordStatus.INACTIVE);
 
         assertThat(response.status()).isEqualTo(RecordStatus.INACTIVE);
+        verify(audit).record(eq("DEACTIVATE"), eq("Ministry"), any(), anyString());
     }
 
     private static <T> T withId(T entity, UUID id) {

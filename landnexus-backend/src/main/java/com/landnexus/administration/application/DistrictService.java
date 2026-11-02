@@ -9,6 +9,7 @@ import com.landnexus.administration.domain.State;
 import com.landnexus.administration.infrastructure.DistrictRepository;
 import com.landnexus.administration.infrastructure.DivisionRepository;
 import com.landnexus.administration.infrastructure.StateRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.InvalidRequestException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
@@ -28,11 +29,13 @@ public class DistrictService {
     private final DistrictRepository repository;
     private final StateRepository states;
     private final DivisionRepository divisions;
+    private final AuditService audit;
 
-    public DistrictService(DistrictRepository repository, StateRepository states, DivisionRepository divisions) {
+    public DistrictService(DistrictRepository repository, StateRepository states, DivisionRepository divisions, AuditService audit) {
         this.repository = repository;
         this.states = states;
         this.divisions = divisions;
+        this.audit = audit;
     }
 
     public PageResponse<DistrictResponse> list(UUID stateId, int page, int size) {
@@ -62,7 +65,9 @@ public class DistrictService {
         }
         District entity = new District();
         apply(entity, request, code, state, division);
-        return DistrictResponse.from(repository.saveAndFlush(entity));
+        District saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "District", saved.getId(), describe(saved));
+        return DistrictResponse.from(saved);
     }
 
     @Transactional
@@ -79,15 +84,20 @@ public class DistrictService {
         if (repository.existsByState_IdAndCodeAndIdNot(state.getId(), code, id)) {
             throw new DuplicateResourceException("District code already exists in the selected state: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code, state, division);
-        return DistrictResponse.from(repository.saveAndFlush(entity));
+        District saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "District", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return DistrictResponse.from(saved);
     }
 
     @Transactional
     public DistrictResponse setStatus(UUID id, RecordStatus status) {
         District entity = find(id);
         entity.setStatus(status);
-        return DistrictResponse.from(repository.saveAndFlush(entity));
+        District saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "District", saved.getId(), describe(saved));
+        return DistrictResponse.from(saved);
     }
 
     private void apply(District entity, DistrictRequest request, String code, State state, Division division) {
@@ -95,6 +105,10 @@ public class DistrictService {
         entity.setName(TextNormalizer.name(request.name()));
         entity.setState(state);
         entity.setDivision(division);
+    }
+
+    private static String describe(District e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus() + ", stateId=" + (e.getState() == null ? null : e.getState().getId()) + ", divisionId=" + (e.getDivision() == null ? null : e.getDivision().getId());
     }
 
     private District find(UUID id) {

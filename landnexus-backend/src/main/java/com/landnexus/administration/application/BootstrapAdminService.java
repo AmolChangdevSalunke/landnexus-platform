@@ -4,6 +4,7 @@ import com.landnexus.administration.domain.Role;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.validation.PasswordPolicy;
 import com.landnexus.shared.validation.TextNormalizer;
 import org.slf4j.Logger;
@@ -24,11 +25,14 @@ public class BootstrapAdminService {
     private final UserAccountRepository users;
     private final RoleRepository roles;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService audit;
 
-    public BootstrapAdminService(UserAccountRepository users, RoleRepository roles, PasswordEncoder passwordEncoder) {
+    public BootstrapAdminService(UserAccountRepository users, RoleRepository roles,
+                                 PasswordEncoder passwordEncoder, AuditService audit) {
         this.users = users;
         this.roles = roles;
         this.passwordEncoder = passwordEncoder;
+        this.audit = audit;
     }
 
     /** @return true when an account was created */
@@ -55,8 +59,10 @@ public class BootstrapAdminService {
         admin.getRoles().add(superAdmin);
         admin.setCreatedBy("bootstrap");
         admin.setUpdatedBy("bootstrap");
-        users.saveAndFlush(admin);
-        log.info("Bootstrap SUPER_ADMIN account '{}' was created", admin.getUsername());
+        UserAccount saved = users.saveAndFlush(admin);
+        audit.recordAs(null, "bootstrap", "BOOTSTRAP_ADMIN_CREATED", "UserAccount", saved.getId(),
+                "username=" + saved.getUsername());
+        log.info("Bootstrap SUPER_ADMIN account '{}' was created", saved.getUsername());
         return true;
     }
 }

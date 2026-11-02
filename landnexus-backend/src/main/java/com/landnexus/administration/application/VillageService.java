@@ -7,6 +7,7 @@ import com.landnexus.administration.domain.Taluka;
 import com.landnexus.administration.domain.Village;
 import com.landnexus.administration.infrastructure.TalukaRepository;
 import com.landnexus.administration.infrastructure.VillageRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import com.landnexus.shared.pagination.PageParams;
@@ -24,10 +25,12 @@ public class VillageService {
 
     private final VillageRepository repository;
     private final TalukaRepository talukas;
+    private final AuditService audit;
 
-    public VillageService(VillageRepository repository, TalukaRepository talukas) {
+    public VillageService(VillageRepository repository, TalukaRepository talukas, AuditService audit) {
         this.repository = repository;
         this.talukas = talukas;
+        this.audit = audit;
     }
 
     public PageResponse<VillageResponse> list(UUID talukaId, int page, int size) {
@@ -51,7 +54,9 @@ public class VillageService {
         }
         Village entity = new Village();
         apply(entity, request, code, taluka);
-        return VillageResponse.from(repository.saveAndFlush(entity));
+        Village saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "Village", saved.getId(), describe(saved));
+        return VillageResponse.from(saved);
     }
 
     @Transactional
@@ -62,21 +67,30 @@ public class VillageService {
         if (repository.existsByTaluka_IdAndCodeAndIdNot(taluka.getId(), code, id)) {
             throw new DuplicateResourceException("Village code already exists in the selected taluka: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code, taluka);
-        return VillageResponse.from(repository.saveAndFlush(entity));
+        Village saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "Village", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return VillageResponse.from(saved);
     }
 
     @Transactional
     public VillageResponse setStatus(UUID id, RecordStatus status) {
         Village entity = find(id);
         entity.setStatus(status);
-        return VillageResponse.from(repository.saveAndFlush(entity));
+        Village saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "Village", saved.getId(), describe(saved));
+        return VillageResponse.from(saved);
     }
 
     private void apply(Village entity, VillageRequest request, String code, Taluka taluka) {
         entity.setCode(code);
         entity.setName(TextNormalizer.name(request.name()));
         entity.setTaluka(taluka);
+    }
+
+    private static String describe(Village e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus() + ", talukaId=" + (e.getTaluka() == null ? null : e.getTaluka().getId());
     }
 
     private Village find(UUID id) {

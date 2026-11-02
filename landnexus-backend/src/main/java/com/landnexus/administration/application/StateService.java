@@ -5,6 +5,7 @@ import com.landnexus.administration.api.dto.StateResponse;
 import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.domain.State;
 import com.landnexus.administration.infrastructure.StateRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import com.landnexus.shared.pagination.PageParams;
@@ -21,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class StateService {
 
     private final StateRepository repository;
+    private final AuditService audit;
 
-    public StateService(StateRepository repository) {
+    public StateService(StateRepository repository, AuditService audit) {
         this.repository = repository;
+        this.audit = audit;
     }
 
     public PageResponse<StateResponse> list(int page, int size) {
@@ -44,7 +47,9 @@ public class StateService {
         }
         State entity = new State();
         apply(entity, request, code);
-        return StateResponse.from(repository.saveAndFlush(entity));
+        State saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "State", saved.getId(), describe(saved));
+        return StateResponse.from(saved);
     }
 
     @Transactional
@@ -54,20 +59,29 @@ public class StateService {
         if (repository.existsByCodeAndIdNot(code, id)) {
             throw new DuplicateResourceException("State code already exists: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code);
-        return StateResponse.from(repository.saveAndFlush(entity));
+        State saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "State", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return StateResponse.from(saved);
     }
 
     @Transactional
     public StateResponse setStatus(UUID id, RecordStatus status) {
         State entity = find(id);
         entity.setStatus(status);
-        return StateResponse.from(repository.saveAndFlush(entity));
+        State saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "State", saved.getId(), describe(saved));
+        return StateResponse.from(saved);
     }
 
     private void apply(State entity, StateRequest request, String code) {
         entity.setCode(code);
         entity.setName(TextNormalizer.name(request.name()));
+    }
+
+    private static String describe(State e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus();
     }
 
     private State find(UUID id) {

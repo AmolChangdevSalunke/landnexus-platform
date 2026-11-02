@@ -11,22 +11,24 @@ Last updated: 2026-11-02
 - Foundation: app starts, /actuator/health UP, Flyway V1 (enable postgis)
 - Shared: ApiError, exception handler (400/401/403/404/405/409 safe), pagination helpers
 - Administration slice 1: Ministry, Department, State, Division, District, Taluka, Village (Flyway V2)
-- Administration slice 2a: JWT login/refresh/logout/me, users, roles, permissions, 13 roles seeded (Flyway V3),
-  backend permission checks (@PreAuthorize), BCrypt, lockout, refresh-token rotation and reuse detection,
-  bootstrap SUPER_ADMIN from environment variables
-- Verification (2026-11-02): `mvnw clean verify` BUILD SUCCESS, 149 tests, 0 failures;
-  auth smoke test 17/17 PASS; master-data smoke test 13/13 PASS
+- Administration slice 2a: JWT login/refresh/logout/me, users, roles, permissions, 13 roles (Flyway V3),
+  backend permission checks, BCrypt, lockout, refresh-token rotation and reuse detection, bootstrap SUPER_ADMIN
+- Administration slice 2b: append-only audit trail, login history, automatic created_by/updated_by,
+  geographic scope (State/Division/District) with GeoScopeService, AUDIT_READ permission (Flyway V4)
+- Verification (2026-11-02): `mvnw clean verify` BUILD SUCCESS, 181 tests, 0 failures;
+  smoke tests for slices 1, 2a, 2b all PASS; database refuses DELETE on audit_events
 
 ## Pending
-- Administration slice 2b: geographic access control, login history, audit events, fill created_by/updated_by on master data
+- Module 2: Government Projects and Consultant Proposal workflow (next)
 - Repository tests on a dedicated test database; production-grade rate limiting
-- Modules 2-7 (Projects first), frontend integration, Docker (later)
+- Modules 3-7, frontend integration, Docker (later)
 
 ## Known risks / limits
 - Access token stays valid up to 15 minutes after a user is disabled
-- show-sql is on (development); move to a dev-only profile
-- Weak local DB password: change before any demo
+- Geographic scope is enforced only on my-districts so far; proposals/parcels must call GeoScopeService
+- IP addresses in login history are personal data: restrict AUDIT_READ, define retention
+- show-sql is on (development); weak local DB password: change before any demo
 - Nothing has been pushed to GitHub (local commits only)
 
 ## Next exact task
-Decide: Administration slice 2b (recommended) or start Module 2 (Government Projects).
+Confirm the Module 2 plan (proposals + workflow engine), then build slice 3a.

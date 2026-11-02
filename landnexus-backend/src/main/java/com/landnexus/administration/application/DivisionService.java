@@ -7,6 +7,7 @@ import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.domain.State;
 import com.landnexus.administration.infrastructure.DivisionRepository;
 import com.landnexus.administration.infrastructure.StateRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import com.landnexus.shared.pagination.PageParams;
@@ -24,10 +25,12 @@ public class DivisionService {
 
     private final DivisionRepository repository;
     private final StateRepository states;
+    private final AuditService audit;
 
-    public DivisionService(DivisionRepository repository, StateRepository states) {
+    public DivisionService(DivisionRepository repository, StateRepository states, AuditService audit) {
         this.repository = repository;
         this.states = states;
+        this.audit = audit;
     }
 
     public PageResponse<DivisionResponse> list(UUID stateId, int page, int size) {
@@ -51,7 +54,9 @@ public class DivisionService {
         }
         Division entity = new Division();
         apply(entity, request, code, state);
-        return DivisionResponse.from(repository.saveAndFlush(entity));
+        Division saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "Division", saved.getId(), describe(saved));
+        return DivisionResponse.from(saved);
     }
 
     @Transactional
@@ -62,21 +67,30 @@ public class DivisionService {
         if (repository.existsByState_IdAndCodeAndIdNot(state.getId(), code, id)) {
             throw new DuplicateResourceException("Division code already exists in the selected state: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code, state);
-        return DivisionResponse.from(repository.saveAndFlush(entity));
+        Division saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "Division", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return DivisionResponse.from(saved);
     }
 
     @Transactional
     public DivisionResponse setStatus(UUID id, RecordStatus status) {
         Division entity = find(id);
         entity.setStatus(status);
-        return DivisionResponse.from(repository.saveAndFlush(entity));
+        Division saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "Division", saved.getId(), describe(saved));
+        return DivisionResponse.from(saved);
     }
 
     private void apply(Division entity, DivisionRequest request, String code, State state) {
         entity.setCode(code);
         entity.setName(TextNormalizer.name(request.name()));
         entity.setState(state);
+    }
+
+    private static String describe(Division e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus() + ", stateId=" + (e.getState() == null ? null : e.getState().getId());
     }
 
     private Division find(UUID id) {

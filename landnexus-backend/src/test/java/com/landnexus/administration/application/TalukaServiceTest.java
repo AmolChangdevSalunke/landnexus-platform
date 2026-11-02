@@ -8,6 +8,7 @@ import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.domain.Taluka;
 import com.landnexus.administration.infrastructure.DistrictRepository;
 import com.landnexus.administration.infrastructure.TalukaRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import java.util.Optional;
@@ -22,6 +23,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.when;
 class TalukaServiceTest {
 
     @Mock private TalukaRepository repository;
+    @Mock private AuditService audit;
     @Mock private DistrictRepository districts;
 
     @InjectMocks
@@ -48,6 +52,7 @@ class TalukaServiceTest {
         assertThat(response.name()).isEqualTo("Sample Name");
         assertThat(response.status()).isEqualTo(RecordStatus.ACTIVE);
         assertThat(response.districtId()).isEqualTo(districtId);
+        verify(audit).record(eq("CREATE"), eq("Taluka"), any(), anyString());
     }
 
     @Test
@@ -59,6 +64,7 @@ class TalukaServiceTest {
         assertThatThrownBy(() -> service.create(new TalukaRequest("  abc ", "  Sample   Name ", districtId)))
                 .isInstanceOf(DuplicateResourceException.class);
         verify(repository, never()).saveAndFlush(any());
+        verify(audit, never()).record(any(), any(), any(), any());
     }
 
     @Test
@@ -89,6 +95,7 @@ class TalukaServiceTest {
         TalukaResponse response = service.setStatus(id, RecordStatus.INACTIVE);
 
         assertThat(response.status()).isEqualTo(RecordStatus.INACTIVE);
+        verify(audit).record(eq("DEACTIVATE"), eq("Taluka"), any(), anyString());
     }
 
     private static <T> T withId(T entity, UUID id) {

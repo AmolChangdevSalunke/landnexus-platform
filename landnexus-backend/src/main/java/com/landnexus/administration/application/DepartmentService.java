@@ -7,6 +7,7 @@ import com.landnexus.administration.domain.Ministry;
 import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.infrastructure.DepartmentRepository;
 import com.landnexus.administration.infrastructure.MinistryRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.DuplicateResourceException;
 import com.landnexus.shared.exception.ResourceNotFoundException;
 import com.landnexus.shared.pagination.PageParams;
@@ -24,10 +25,12 @@ public class DepartmentService {
 
     private final DepartmentRepository repository;
     private final MinistryRepository ministries;
+    private final AuditService audit;
 
-    public DepartmentService(DepartmentRepository repository, MinistryRepository ministries) {
+    public DepartmentService(DepartmentRepository repository, MinistryRepository ministries, AuditService audit) {
         this.repository = repository;
         this.ministries = ministries;
+        this.audit = audit;
     }
 
     public PageResponse<DepartmentResponse> list(UUID ministryId, int page, int size) {
@@ -51,7 +54,9 @@ public class DepartmentService {
         }
         Department entity = new Department();
         apply(entity, request, code, ministry);
-        return DepartmentResponse.from(repository.saveAndFlush(entity));
+        Department saved = repository.saveAndFlush(entity);
+        audit.record("CREATE", "Department", saved.getId(), describe(saved));
+        return DepartmentResponse.from(saved);
     }
 
     @Transactional
@@ -62,15 +67,20 @@ public class DepartmentService {
         if (repository.existsByCodeAndIdNot(code, id)) {
             throw new DuplicateResourceException("Department code already exists: " + code);
         }
+        String before = describe(entity);
         apply(entity, request, code, ministry);
-        return DepartmentResponse.from(repository.saveAndFlush(entity));
+        Department saved = repository.saveAndFlush(entity);
+        audit.record("UPDATE", "Department", saved.getId(), "before: " + before + " | after: " + describe(saved));
+        return DepartmentResponse.from(saved);
     }
 
     @Transactional
     public DepartmentResponse setStatus(UUID id, RecordStatus status) {
         Department entity = find(id);
         entity.setStatus(status);
-        return DepartmentResponse.from(repository.saveAndFlush(entity));
+        Department saved = repository.saveAndFlush(entity);
+        audit.record(status == RecordStatus.ACTIVE ? "ACTIVATE" : "DEACTIVATE", "Department", saved.getId(), describe(saved));
+        return DepartmentResponse.from(saved);
     }
 
     private void apply(Department entity, DepartmentRequest request, String code, Ministry ministry) {
@@ -78,6 +88,10 @@ public class DepartmentService {
         entity.setName(TextNormalizer.name(request.name()));
         entity.setMinistry(ministry);
         entity.setLevel(request.level());
+    }
+
+    private static String describe(Department e) {
+        return "code=" + e.getCode() + ", name=" + e.getName() + ", status=" + e.getStatus() + ", ministryId=" + (e.getMinistry() == null ? null : e.getMinistry().getId()) + ", level=" + e.getLevel();
     }
 
     private Department find(UUID id) {

@@ -3,6 +3,8 @@ package com.landnexus.administration.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +13,7 @@ import com.landnexus.administration.domain.Role;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.InvalidRequestException;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,12 +30,13 @@ class BootstrapAdminServiceTest {
     @Mock private UserAccountRepository users;
     @Mock private RoleRepository roles;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private AuditService audit;
 
     private BootstrapAdminService service;
 
     @BeforeEach
     void setUp() {
-        service = new BootstrapAdminService(users, roles, passwordEncoder);
+        service = new BootstrapAdminService(users, roles, passwordEncoder, audit);
     }
 
     @Test
@@ -75,5 +79,6 @@ class BootstrapAdminServiceTest {
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("hashed");
         assertThat(saved.getValue().getEmail()).isEqualTo("admin@landnexus.local");
         assertThat(saved.getValue().roleCodes()).containsExactly("SUPER_ADMIN");
+        verify(audit).recordAs(any(), eq("bootstrap"), eq("BOOTSTRAP_ADMIN_CREATED"), eq("UserAccount"), any(), anyString());
     }
 }
