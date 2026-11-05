@@ -24,6 +24,7 @@ import com.landnexus.shared.security.CurrentActor;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -104,6 +105,24 @@ public class GeoScopeService {
                 : lookup.findAccessible(nonEmpty(scope.stateIds()), nonEmpty(scope.divisionIds()),
                         nonEmpty(scope.districtIds()), pageable);
         return PageResponse.from(result, DistrictResponse::from);
+    }
+
+    /**
+     * Ids of every district the caller may work with, or empty when the caller is nationwide
+     * (so "empty" means "no restriction", not "nothing").
+     */
+    public Optional<Set<UUID>> accessibleDistrictIds(CurrentActor actor) {
+        GeoScope scope = resolve(actor);
+        if (scope.nationwide()) {
+            return Optional.empty();
+        }
+        Page<District> all = lookup.findAccessible(nonEmpty(scope.stateIds()), nonEmpty(scope.divisionIds()),
+                nonEmpty(scope.districtIds()), Pageable.unpaged());
+        Set<UUID> ids = new HashSet<>();
+        for (District district : all) {
+            ids.add(district.getId());
+        }
+        return Optional.of(ids);
     }
 
     public List<ScopeEntryResponse> listScopes(UUID userId) {
