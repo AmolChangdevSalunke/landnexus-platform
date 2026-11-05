@@ -39,6 +39,9 @@ public class AdministrationLookupService {
     public record UserRef(UUID id, String username) {
     }
 
+    public record VillageDetailRef(UUID id, String name, UUID talukaId, UUID districtId, UUID stateId) {
+    }
+
     private final DistrictRepository districts;
     private final TalukaRepository talukas;
     private final VillageRepository villages;
@@ -99,5 +102,17 @@ public class AdministrationLookupService {
             }
         }
         return result;
+    }
+
+    /** A village with its taluka, district and state (used by land records to place a parcel). */
+    public Optional<VillageDetailRef> findActiveVillageDetail(UUID id) {
+        return villages.findById(id)
+                .filter(v -> v.getStatus() == RecordStatus.ACTIVE)
+                .map(v -> {
+                    Taluka taluka = v.getTaluka();
+                    District district = taluka.getDistrict();
+                    return new VillageDetailRef(v.getId(), v.getName(), taluka.getId(), district.getId(),
+                            district.getState().getId());
+                });
     }
 }
