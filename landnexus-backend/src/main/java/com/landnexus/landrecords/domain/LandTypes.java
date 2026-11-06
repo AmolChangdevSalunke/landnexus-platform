@@ -22,4 +22,10 @@ public final class LandTypes {
     public enum RevenueRecordType { SEVEN_TWELVE, EIGHT_A }
 
     public enum ParcelStatus { ACTIVE, INACTIVE }
+
+    public enum DocumentCategory {
+        SEVEN_TWELVE_EXTRACT, EIGHT_A_EXTRACT, MUTATION_ENTRY, SALE_DEED, SURVEY_MAP, NOTICE, OTHER
+    }
+
+    public enum VerificationStatus { PENDING, VERIFIED, REJECTED }
 }

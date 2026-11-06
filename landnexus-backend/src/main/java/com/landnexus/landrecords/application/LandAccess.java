@@ -17,6 +17,8 @@ public class LandAccess {
 
     public static final String READ = "LAND_RECORD_READ";
 
+    public static final String DOCUMENT_READ = "DOCUMENT_READ";
+
     private final GeoScopeService geoScope;
 
     public LandAccess(GeoScopeService geoScope) {
@@ -25,6 +27,10 @@ public class LandAccess {
 
     public boolean canView(CurrentActor actor, UUID districtId) {
         return actor.hasAuthority(READ) && geoScope.canAccessDistrict(actor, districtId);
+    }
+
+    public boolean canViewDocuments(CurrentActor actor, UUID districtId) {
+        return actor.hasAuthority(DOCUMENT_READ) && geoScope.canAccessDistrict(actor, districtId);
     }
 
     /** A list filter for any entity that has a districtId attribute. */
