@@ -2,10 +2,9 @@
 
 React 18 + TypeScript + Vite frontend for the LandNexus land acquisition platform.
 
-**Current delivery: Phase F4 (administration).** F0/F1, F2 and F3 are complete, and F4 is
-implemented and verified. The app uses the real Spring Boot backend
-only. There is no demo data: screens that are not connected yet show an honest "planned"
-state.
+**Current delivery: Phase F5 (GIS map).** F0/F1, F2, F3, F4 and F5 are complete and
+verified. The app uses the real Spring Boot backend only. There is no demo data: screens
+that are not connected yet show an honest "planned" state.
 
 ## Requirements
 
@@ -111,14 +110,31 @@ npm run preview  # serve the production bundle
   be removed and saved
 - Friendly 400, 401, 403, 404, 409 and network error states; no invented records or counts
 
+## What Phase F5 contains
+
+- Dedicated GIS map at `/gis`, built from the bundled `vardhan-maps` boundaries and the
+  real `GET /projects` response; no generated or invented geometry
+- District-level view that follows the backend geographic scope from
+  `/administration/my-districts`: nationwide roles see India, and scoped roles see their
+  state, division or district
+- Selectable map districts that filter the read-only project table through the backend's
+  `districtId` parameter, plus a district filter, server pagination and clear-filter action
+- Honest states for missing permission, 403/network errors and empty results
+- Route and navigation need `MASTER_DATA_READ`; listing projects additionally needs
+  `PROPOSAL_READ_OWN` or `PROPOSAL_READ`
+- `/roadmap/gis` redirects to `/gis`, and GIS is no longer listed as a planned module
+- Parcel boundaries, project alignments and owner data are not part of F5; they remain
+  planned for a later GIS phase
+
 ## Not available yet
 
-F5, GIS, land records, documents, field surveys and valuation are planned for later phases.
-Their routes show a planned-state screen with no invented records or numbers.
+Land records, documents, land acquisition, field surveys, valuation, parcel-level GIS
+layers and Monitoring/MIS are planned for later phases. Their routes show a planned-state
+screen with no invented records or numbers.
 
-The **Permission-Based Geographic Map** (Section 8.14) is approved as a concept only and
-is not implemented in F4. It will be built in a later GIS phase with backend-enforced
-geographic scope and permissions. See `../docs/PROJECT_PLAN.md`.
+The **Permission-Based Geographic Map** (Section 8.14) is approved as a concept for a
+later parcel/geometry GIS phase. F5 implements the district-level coverage view only.
+See `../docs/PROJECT_PLAN.md`.
 
 ## Legacy prototype
 

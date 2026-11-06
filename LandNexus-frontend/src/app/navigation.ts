@@ -56,6 +56,12 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: FolderKanban,
         permissions: [...PROPOSAL_READ_ANY],
       },
+      {
+        label: 'GIS map',
+        to: '/gis',
+        icon: Map,
+        permissions: [PERMISSION.MASTER_DATA_READ],
+      },
       { label: 'Notifications', to: '/notifications', icon: Bell },
     ],
   },
@@ -112,7 +118,6 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: IndianRupee,
         planned: true,
       },
-      { label: 'GIS map', to: '/roadmap/gis', icon: Map, planned: true },
       {
         label: 'Monitoring and MIS',
         to: '/roadmap/monitoring-mis',

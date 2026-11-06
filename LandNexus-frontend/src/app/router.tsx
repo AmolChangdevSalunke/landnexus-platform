@@ -13,6 +13,7 @@ import { ProposalDetailsPage } from '../features/proposals/ProposalDetailsPage'
 import { ProposalFormPage } from '../features/proposals/ProposalFormPage'
 import { ProposalListPage } from '../features/proposals/ProposalListPage'
 import { NotFoundPage } from '../features/shared/NotFoundPage'
+import { GisMapPage } from '../features/gis/GisMapPage'
 import { MasterDataPage } from '../features/admin/master/MasterDataPage'
 import { AuditTrailPage } from '../features/admin/users/AuditTrailPage'
 import { LoginHistoryPage } from '../features/admin/users/LoginHistoryPage'
@@ -85,6 +86,15 @@ export function AppRoutes() {
             }
           />
 
+          <Route
+            path="gis"
+            element={
+              <RequirePermission any={[PERMISSION.MASTER_DATA_READ]}>
+                <GisMapPage />
+              </RequirePermission>
+            }
+          />
+
           <Route path="notifications" element={<NotificationListPage />} />
 
           <Route path="admin" element={<Navigate to="/admin/master/ministries" replace />} />
@@ -137,6 +147,7 @@ export function AppRoutes() {
           <Route path="404" element={<NotFoundPage />} />
           <Route path="403" element={<NoAccessPage />} />
           <Route path="roadmap" element={<Navigate to="/roadmap/land-records" replace />} />
+          <Route path="roadmap/gis" element={<Navigate to="/gis" replace />} />
           <Route path="roadmap/:module" element={<RoadmapPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

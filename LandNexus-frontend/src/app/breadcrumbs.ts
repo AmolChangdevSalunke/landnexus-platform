@@ -66,6 +66,10 @@ export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
     return [{ label: 'Notifications' }]
   }
 
+  if (pathname === '/gis') {
+    return [{ label: 'GIS map' }]
+  }
+
   if (pathname.startsWith('/admin/master/')) {
     const resource = pathname.split('/')[3] ?? ''
     return [

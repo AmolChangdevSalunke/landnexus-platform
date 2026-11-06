@@ -3,6 +3,7 @@ import { getState, getStates, loadDistricts } from 'vardhan-maps/data'
 import { fitProjection, type Projection } from 'vardhan-maps/svg'
 import { Card } from '../../components/ui/Card'
 import { useApiQuery } from '../../hooks/useApiQuery'
+import { normalizeMapName as normalize } from './mapNames'
 import { useProjectCoverage } from './useProjectCoverage'
 import { useScopeDistricts } from './useScopeDistricts'
 
@@ -98,17 +99,6 @@ function colorForIndex(index: number): string {
   }
   const hue = Math.round((index * 137.508) % 360)
   return `hsl(${hue} 68% 42%)`
-}
-
-function normalize(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    // The map dataset names districts like "Pune District"; the backend does not.
-    .replace(/\bdistrict\b/g, '')
-    .replace(/\bdivision\b/g, '')
-    .replace(/[^a-z0-9]/g, '')
 }
 
 function unique(values: string[]): string[] {
@@ -296,13 +286,15 @@ function buildPaths(
   data: MapData,
   level: MapLevel,
   highlightedNames: string[],
+  width: number,
+  height: number,
 ): RenderedPath[] {
   const bounds = boundsOf(data.features)
   if (!bounds) {
     return []
   }
 
-  const projection = fitProjection(bounds, MAP_WIDTH, MAP_HEIGHT, MAP_PADDING)
+  const projection = fitProjection(bounds, width, height, MAP_PADDING)
   const palette = buildPalette(highlightedNames)
   const stroke = data.boundaryFallback || level === 'district' ? FOCUS_BOUNDARY : level === 'nation' ? STATE_BOUNDARY : DISTRICT_BOUNDARY
   const strokeWidth = data.boundaryFallback || level === 'district' ? 1 : level === 'nation' ? 0.8 : 0.7
@@ -381,7 +373,23 @@ function mapLabel(view: ScopeView, boundaryFallback: boolean): string {
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export function ScopeMap() {
+interface ScopeMapProps {
+  width?: number
+  height?: number
+  className?: string
+  /** Makes in-scope district areas selectable at state, division or district level. */
+  onSelectDistrict?: (districtName: string) => void
+  /** Highlights the district currently used as a list filter. */
+  selectedDistrictName?: string | null
+}
+
+export function ScopeMap({
+  width = MAP_WIDTH,
+  height = MAP_HEIGHT,
+  className,
+  onSelectDistrict,
+  selectedDistrictName = null,
+}: ScopeMapProps = {}) {
   const scope = useScopeDistricts()
   const coverage = useProjectCoverage()
 
@@ -417,7 +425,7 @@ export function ScopeMap() {
   const highlightedNames =
     view?.level === 'nation' ? coverage.stateNames : projectDistrictNames
 
-  const paths = data && view ? buildPaths(data, view.level, highlightedNames) : []
+  const paths = data && view ? buildPaths(data, view.level, highlightedNames, width, height) : []
   const legend = paths
     .filter((path) => path.fill !== NO_PROJECT_FILL)
     .map((path) => ({ name: path.name, color: path.fill }))
@@ -466,38 +474,85 @@ export function ScopeMap() {
     ? null
     : 'Project highlights need proposal read access.'
 
+  const selectableNames = new Set((view?.scopeDistrictNames ?? []).map(normalize))
+  const hasSelectablePath =
+    Boolean(onSelectDistrict) &&
+    view !== null &&
+    view.level !== 'nation' &&
+    paths.some((path) => selectableNames.has(normalize(path.name)))
+  const selectable = hasSelectablePath
+
   return (
-    <Card className="overflow-hidden bg-white p-3">
+    <Card
+      className={['overflow-hidden bg-white p-3', className].filter(Boolean).join(' ')}
+    >
       <div
-        role="img"
-        aria-label={label}
+        role={selectable ? 'group' : 'img'}
+        aria-label={
+          selectable
+            ? `${label}. Select a district to filter the project table.`
+            : label
+        }
         className="relative overflow-hidden rounded-lg border border-slate-200 bg-white"
       >
         {paths.length > 0 ? (
           <svg
-            aria-hidden="true"
+            aria-hidden={selectable ? undefined : true}
             focusable="false"
-            viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+            viewBox={`0 0 ${width} ${height}`}
             preserveAspectRatio="xMidYMid meet"
             className="block h-auto w-full"
-            style={{ maxHeight: MAP_HEIGHT }}
+            style={{ maxHeight: height }}
           >
-            {paths.map((path) => (
-              <path
-                key={path.key}
-                d={path.d}
-                fill={path.fill}
-                stroke={path.stroke}
-                strokeWidth={path.strokeWidth}
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              >
-                <title>{path.name}</title>
-              </path>
-            ))}
+            {paths.map((path) => {
+              const isSelected =
+                selectedDistrictName !== null &&
+                normalize(path.name) === normalize(selectedDistrictName)
+              const isSelectable = selectable && selectableNames.has(normalize(path.name))
+
+              return (
+                <path
+                  key={path.key}
+                  d={path.d}
+                  fill={path.fill}
+                  stroke={isSelected ? '#1D4ED8' : path.stroke}
+                  strokeWidth={isSelected ? 2.2 : path.strokeWidth}
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                  role={isSelectable ? 'button' : undefined}
+                  tabIndex={isSelectable ? 0 : undefined}
+                  aria-label={isSelectable ? `Filter projects in ${path.name}` : undefined}
+                  className={
+                    isSelectable
+                      ? 'cursor-pointer focus:outline-none focus-visible:stroke-blue-700'
+                      : undefined
+                  }
+                  onClick={
+                    isSelectable && onSelectDistrict
+                      ? () => onSelectDistrict(path.name)
+                      : undefined
+                  }
+                  onKeyDown={
+                    isSelectable && onSelectDistrict
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            onSelectDistrict(path.name)
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <title>{path.name}</title>
+                </path>
+              )
+            })}
           </svg>
         ) : (
-          <div className="flex h-[300px] items-center justify-center px-6 text-center text-xs leading-5 text-slate-500">
+          <div
+            className="flex items-center justify-center px-6 text-center text-xs leading-5 text-slate-500"
+            style={{ height }}
+          >
             {emptyMessage}
           </div>
         )}

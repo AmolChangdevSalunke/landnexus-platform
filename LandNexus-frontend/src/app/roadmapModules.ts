@@ -3,7 +3,6 @@ import {
   ClipboardCheck,
   FileText,
   IndianRupee,
-  Map,
   MapPinned,
   Ruler,
   type LucideIcon,
@@ -74,17 +73,6 @@ export const ROADMAP_MODULES: Record<string, RoadmapModule> = {
       'Compensation award records',
       'Payment and disbursement tracking',
       'Finance officer review notes',
-    ],
-  },
-  gis: {
-    title: 'GIS map',
-    summary: 'Map layers, project alignments and affected villages.',
-    icon: Map,
-    contents: [
-      'Project alignment layers',
-      'Affected village boundaries',
-      'Parcel and land-use layers',
-      'Map-based selection and links to records',
     ],
   },
   'monitoring-mis': {
