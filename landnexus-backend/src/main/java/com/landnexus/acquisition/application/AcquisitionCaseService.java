@@ -76,13 +76,14 @@ public class AcquisitionCaseService {
     private final NotificationService notifications;
     private final AuditService audit;
     private final Clock clock;
+    private final CaseGuards guards;
 
     public AcquisitionCaseService(AcquisitionCaseRepository cases, CaseParcelRepository caseParcels,
                                   CaseParcelOwnerRepository owners, FieldSurveyRepository surveys,
                                   CaseStatusHistoryRepository history, ProjectLookupService projects,
                                   LandRecordsLookupService land, AdministrationLookupService admin,
                                   GeoScopeService geoScope, AcquisitionAccess access,
-                                  NotificationService notifications, AuditService audit, Clock clock) {
+                                  NotificationService notifications, AuditService audit, Clock clock, CaseGuards guards) {
         this.cases = cases;
         this.caseParcels = caseParcels;
         this.owners = owners;
@@ -96,6 +97,7 @@ public class AcquisitionCaseService {
         this.notifications = notifications;
         this.audit = audit;
         this.clock = clock;
+        this.guards = guards;
     }
 
     // ------------------------------------------------------------------ queries
@@ -323,10 +325,11 @@ public class AcquisitionCaseService {
                 throw new InvalidRequestException((parcelCount - verified) + " affected parcel(s) still have no verified survey");
             }
         }
+        guards.check(action, c);
         CaseStatus from = c.getStatus();
         c.setStatus(transition.to());
         AcquisitionCase saved = cases.saveAndFlush(c);
-        if (CaseWorkflow.CANCEL.equals(action)) {
+        if (CaseWorkflow.CANCEL.equals(action) || CaseWorkflow.CLOSE.equals(action)) {
             caseParcels.releaseAll(caseId, now);
         }
         history.save(new CaseStatusHistory(caseId, from, transition.to(), action, actor.userId(), actor.username(),

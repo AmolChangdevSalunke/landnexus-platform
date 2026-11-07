@@ -29,6 +29,14 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import org.junit.jupiter.api.AfterAll;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 /** Real database, real filter chain, real tokens, synthetic data only. */
 @SpringBootTest
@@ -50,6 +58,30 @@ class AcquisitionIntegrationTest {
     private String district1, village1, village2;
     private UUID projectId, field1Id, managerId;
     private String manager, field1, field2, authority, consultant, finance;
+
+    private static final Path STORAGE = newTempDir();
+
+    private static Path newTempDir() {
+        try {
+            return Files.createTempDirectory("landnexus-it-acq");
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @DynamicPropertySource
+    static void storage(DynamicPropertyRegistry registry) {
+        registry.add("landnexus.storage.dir", STORAGE::toString);
+    }
+
+    @AfterAll
+    static void deleteStorage() throws java.io.IOException {
+        try (var paths = Files.walk(STORAGE)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+        }
+    }
+
+    private static final byte[] PNG = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
 
     @BeforeEach
     void setUp() throws Exception {
@@ -106,6 +138,17 @@ class AcquisitionIntegrationTest {
         String like = prefix + "%";
         String owners = "(SELECT id FROM users WHERE username LIKE ?)";
         String cases = "(SELECT id FROM acquisition_cases WHERE project_id = ?)";
+        try {
+            jdbc.execute("ALTER TABLE survey_photos DISABLE TRIGGER trg_survey_photos_append_only");
+            jdbc.update("DELETE FROM survey_photos WHERE survey_id IN (SELECT id FROM field_surveys WHERE case_id IN " + cases + ")", projectId);
+        } finally {
+            jdbc.execute("ALTER TABLE survey_photos ENABLE TRIGGER trg_survey_photos_append_only");
+        }
+        jdbc.update("DELETE FROM possession_records WHERE case_id IN " + cases, projectId);
+        jdbc.update("DELETE FROM award_parcels WHERE award_id IN (SELECT id FROM acquisition_awards WHERE case_id IN " + cases + ")", projectId);
+        jdbc.update("DELETE FROM acquisition_awards WHERE case_id IN " + cases, projectId);
+        jdbc.update("DELETE FROM objections WHERE case_id IN " + cases, projectId);
+        jdbc.update("DELETE FROM legal_notices WHERE case_id IN " + cases, projectId);
         jdbc.update("DELETE FROM field_surveys WHERE case_id IN " + cases, projectId);
         jdbc.update("DELETE FROM case_parcel_owners WHERE case_parcel_id IN (SELECT id FROM case_parcels WHERE case_id IN " + cases + ")", projectId);
         jdbc.update("DELETE FROM case_parcels WHERE case_id IN " + cases, projectId);
@@ -280,5 +323,111 @@ class AcquisitionIntegrationTest {
         mockMvc.perform(get(ACQ + "/cases/" + caseId + "/history").header("Authorization", manager))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(4));
+
+    }
+
+    @Test
+    void lifecycle_surveyPhotos_notice_objection_award_possession_closure() throws Exception {
+        String caseId = newCase();
+        String base = ACQ + "/cases/" + caseId;
+        expect(call(manager, "PUT", base + "/villages", "{\"villageIds\":[\"" + village1 + "\"]}"), 200);
+        String parcelId = parcel(village1, "DEMO-601", "2.0000");
+        String caseParcelId = id(call(manager, "POST", base + "/parcels", "{\"parcelId\":\"" + parcelId + "\",\"areaToAcquireHa\":1.5}"));
+        expect(call(manager, "POST", base + "/parcels/" + caseParcelId + "/assign", "{\"surveyorUserId\":\"" + field1Id + "\"}"), 200);
+        expect(call(manager, "POST", base + "/start-survey", null), 200);
+        String surveyId = id(call(field1, "POST", base + "/parcels/" + caseParcelId + "/surveys",
+                "{\"surveyedOn\":\"2026-11-01\",\"measuredAreaHa\":2.0,\"gpsLatitude\":19.87,\"gpsLongitude\":75.34}"));
+
+        // geo-tagged photos: only images, only the surveyor, GPS inside India
+        String photos = base + "/surveys/" + surveyId + "/photos";
+        expect(photo(field1, photos, "evil.png", "image/png", new byte[] {0x4D, 0x5A, 0, 0}, "19.87", "75.34"), 400);
+        expect(photo(field1, photos, "doc.pdf", "application/pdf", "%PDF-1.4 x".getBytes(), "19.87", "75.34"), 400);
+        expect(photo(field1, photos, "site.png", "image/png", PNG, "75.34", "19.87"), 400);
+        expect(photo(manager, photos, "site.png", "image/png", PNG, "19.87", "75.34"), 403);
+        expect(photo(field2, photos, "site.png", "image/png", PNG, "19.87", "75.34"), 404);
+        MvcResult photo = photo(field1, photos, "site.png", "image/png", PNG, "19.87", "75.34");
+        expect(photo, 201);
+        assertThat(photo.getResponse().getContentAsString()).doesNotContain("stored").doesNotContain(".bin");
+        MvcResult download = call(finance, "GET", photos + "/" + id(photo) + "/download", null);
+        expect(download, 200);
+        assertThat(download.getResponse().getContentAsByteArray()).isEqualTo(PNG);
+        assertThat(download.getResponse().getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+
+        String survey = base + "/surveys/" + surveyId;
+        expect(call(manager, "POST", survey + "/verify", null), 200);
+        expect(photo(field1, photos, "late.png", "image/png", PNG, "19.87", "75.34"), 409);
+        expect(call(manager, "POST", base + "/complete-verification", null), 200);
+
+        // notice and the objection period (dates in the past: the notice was already published)
+        String today = LocalDate.now().toString();
+        String issued = LocalDate.now().minusDays(60).toString();
+        String deadline = LocalDate.now().minusDays(30).toString();
+        expect(call(manager, "POST", base + "/issue-notification", null), 403);
+        expect(call(authority, "POST", base + "/issue-notification", null), 400);
+        expect(call(manager, "POST", base + "/notices", "{\"noticeType\":\"PRELIMINARY_NOTIFICATION\",\"referenceNumber\":\"DEMO-GZ-1\",\"issuedOn\":\"" + issued + "\"}"), 400);
+        expect(call(manager, "POST", base + "/notices", "{\"noticeType\":\"AWARD_NOTICE\",\"referenceNumber\":\"DEMO-GZ-9\",\"issuedOn\":\"" + issued + "\"}"), 409);
+//        expect(call(consultant, "POST", base + "/notices", "{}"), 403);
+        expect(call(consultant, "POST", base + "/notices",
+                "{\"noticeType\":\"PRELIMINARY_NOTIFICATION\","
+                        + "\"referenceNumber\":\"CONSULTANT-TEST-1\","
+                        + "\"issuedOn\":\"" + issued + "\","
+                        + "\"objectionDeadline\":\"" + deadline + "\"}"), 403);
+        expect(call(manager, "POST", base + "/notices", "{\"noticeType\":\"PRELIMINARY_NOTIFICATION\",\"referenceNumber\":\"DEMO-GZ-1\",\"issuedOn\":\""
+                + issued + "\",\"objectionDeadline\":\"" + deadline + "\"}"), 201);
+        expect(call(manager, "POST", base + "/notices", "{\"noticeType\":\"PRELIMINARY_NOTIFICATION\",\"referenceNumber\":\"DEMO-GZ-1\",\"issuedOn\":\""
+                + issued + "\",\"objectionDeadline\":\"" + deadline + "\"}"), 409);
+        expect(call(authority, "POST", base + "/issue-notification", null), 200);
+
+        // objections: only inside the period; the registrar cannot decide; the window stays open until all are decided
+        String objections = base + "/objections";
+        expect(call(manager, "POST", objections, "{\"caseParcelId\":\"" + caseParcelId + "\",\"receivedOn\":\"" + today + "\",\"grounds\":\"DEMO late\"}"), 400);
+        String received = LocalDate.now().minusDays(45).toString();
+        MvcResult objection = call(manager, "POST", objections, "{\"caseParcelId\":\"" + caseParcelId + "\",\"receivedOn\":\"" + received
+                + "\",\"grounds\":\"DEMO grounds\",\"objectorReference\":\"DEMO objector\"}");
+        expect(objection, 201);
+        String objectionId = id(objection);
+        expect(call(manager, "POST", base + "/close-objection-window", null), 400);
+        expect(call(manager, "POST", objections + "/" + objectionId + "/decide", "{\"outcome\":\"DISMISSED\",\"remarks\":\"x\"}"), 403);
+        expect(call(authority, "POST", objections + "/" + objectionId + "/decide", "{\"outcome\":\"OPEN\",\"remarks\":\"x\"}"), 400);
+        expect(call(authority, "POST", objections + "/" + objectionId + "/decide", "{\"outcome\":\"DISMISSED\",\"remarks\":\"DEMO: no merit\"}"), 200);
+        expect(call(authority, "POST", objections + "/" + objectionId + "/decide", "{\"outcome\":\"ACCEPTED\",\"remarks\":\"again\"}"), 409);
+        // the objector reference is personal data: visible to a manager (LANDOWNER_READ), hidden from finance
+        mockMvc.perform(get(objections).header("Authorization", finance)).andExpect(jsonPath("$[0].objectorReference").doesNotExist());
+        mockMvc.perform(get(objections).header("Authorization", manager)).andExpect(jsonPath("$[0].objectorReference").value("DEMO objector"));
+        expect(call(manager, "POST", base + "/close-objection-window", null), 200);
+
+        // award: declared by the competent authority, one line per parcel, no money
+        String award = "{\"awardNumber\":\"DEMO-AW-1\",\"awardDate\":\"" + LocalDate.now().minusDays(40) + "\"}";
+        expect(call(manager, "POST", base + "/award", award), 403);
+        expect(call(authority, "POST", base + "/award", award), 400);
+        MvcResult declared = call(authority, "POST", base + "/award",
+                "{\"awardNumber\":\"DEMO-AW-1\",\"awardDate\":\"" + LocalDate.now().minusDays(10) + "\"}");
+        expect(declared, 201);
+        assertThat(declared.getResponse().getContentAsString()).contains("\"awardNumber\":\"DEMO-AW-1\"").contains("\"awardedAreaHa\":1.5");
+        expect(call(authority, "POST", base + "/cancel", "{\"reason\":\"too late\"}"), 409);
+
+        // possession: after the award date, once per parcel; completing needs every parcel
+        String possessions = base + "/possessions";
+        expect(call(manager, "POST", base + "/complete-possession", null), 400);
+        expect(call(manager, "POST", possessions, "{\"caseParcelId\":\"" + caseParcelId + "\",\"possessionDate\":\"" + LocalDate.now().minusDays(20)
+                + "\",\"possessionType\":\"PHYSICAL\"}"), 400);
+        String possession = "{\"caseParcelId\":\"" + caseParcelId + "\",\"possessionDate\":\"" + LocalDate.now().minusDays(5) + "\",\"possessionType\":\"PHYSICAL\"}";
+        expect(call(manager, "POST", possessions, possession), 201);
+        expect(call(manager, "POST", possessions, possession), 409);
+        expect(call(manager, "POST", base + "/complete-possession", null), 200);
+
+        // closure frees the parcel for a later case
+        expect(call(manager, "POST", base + "/close", null), 403);
+        expect(call(authority, "POST", base + "/close", "{\"reason\":\"DEMO: acquisition completed\"}"), 200);
+        String second = newCase();
+        expect(call(manager, "PUT", ACQ + "/cases/" + second + "/villages", "{\"villageIds\":[\"" + village1 + "\"]}"), 200);
+        expect(call(manager, "POST", ACQ + "/cases/" + second + "/parcels", "{\"parcelId\":\"" + parcelId + "\",\"areaToAcquireHa\":0.5}"), 201);
+
+        mockMvc.perform(get(base + "/history").header("Authorization", manager)).andExpect(jsonPath("$.length()").value(8));
+    }
+
+    private MvcResult photo(String token, String path, String filename, String type, byte[] content, String lat, String lon) throws Exception {
+        return mockMvc.perform(multipart(path).file(new MockMultipartFile("file", filename, type, content))
+                .param("latitude", lat).param("longitude", lon).header("Authorization", token)).andReturn();
     }
 }

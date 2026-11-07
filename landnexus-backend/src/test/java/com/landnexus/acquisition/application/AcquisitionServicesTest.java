@@ -78,6 +78,7 @@ class AcquisitionServicesTest {
     @Mock private AcquisitionAccess access;
     @Mock private NotificationService notifications;
     @Mock private AuditService audit;
+    @Mock private CaseGuards guards;
 
     private AcquisitionCaseService caseService;
     private SurveyService surveyService;
@@ -101,7 +102,7 @@ class AcquisitionServicesTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         caseService = new AcquisitionCaseService(cases, caseParcels, owners, surveys, history, projects, land, admin,
-                geoScope, access, notifications, audit, clock);
+                geoScope, access, notifications, audit, clock, guards);
         surveyService = new SurveyService(cases, caseParcels, surveys, land, admin, access, notifications, audit, clock);
         lenient().when(access.canView(any(), any())).thenReturn(true);
         lenient().when(cases.saveAndFlush(any(AcquisitionCase.class))).thenAnswer(inv -> inv.getArgument(0));
