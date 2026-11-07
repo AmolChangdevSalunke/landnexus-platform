@@ -123,6 +123,16 @@ class CompensationIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        try {
+            jdbc.execute("ALTER TABLE payment_events DISABLE TRIGGER trg_payment_events_append_only");
+            jdbc.update("DELETE FROM payment_events WHERE payment_id IN (SELECT id FROM compensation_payments WHERE case_id = ?)", caseId);
+        } finally {
+            jdbc.execute("ALTER TABLE payment_events ENABLE TRIGGER trg_payment_events_append_only");
+        }
+        jdbc.update("DELETE FROM compensation_payments WHERE case_id = ?", caseId);
+        jdbc.update("DELETE FROM rr_entitlements WHERE rr_case_id IN (SELECT id FROM rr_cases WHERE case_id = ?)", caseId);
+        jdbc.update("DELETE FROM rr_cases WHERE case_id = ?", caseId);
+        jdbc.update("DELETE FROM rr_benefit_types WHERE code LIKE ?", "%" + suffix);
         String like = prefix + "%";
         String owners = "(SELECT id FROM users WHERE username LIKE ?)";
         jdbc.update("DELETE FROM valuation_lines WHERE valuation_id IN (SELECT id FROM valuations WHERE case_id = ?)", caseId);
@@ -248,6 +258,15 @@ class CompensationIntegrationTest {
         return valuation;
     }
 
+    /** Two DEMO landowners owning the parcel 60% and 40% in the case's ownership snapshot. */
+    private String[] snapshotOwners() throws Exception {
+        String a = id(call(field1, "POST", LR + "/landowners", "{\"districtId\":\"" + district1 + "\",\"ownerType\":\"INDIVIDUAL\",\"fullName\":\"DEMO Owner One\"}"));
+        String b = id(call(field1, "POST", LR + "/landowners", "{\"districtId\":\"" + district1 + "\",\"ownerType\":\"INDIVIDUAL\",\"fullName\":\"DEMO Owner Two\"}"));
+        jdbc.update("INSERT INTO case_parcel_owners (case_parcel_id, landowner_id, share_percent) VALUES (?, ?, 60)", caseParcelId, UUID.fromString(a));
+        jdbc.update("INSERT INTO case_parcel_owners (case_parcel_id, landowner_id, share_percent) VALUES (?, ?, 40)", caseParcelId, UUID.fromString(b));
+        return new String[] {a, b};
+    }
+
     // ------------------------------------------------------------------ tests
 
     @Test
@@ -332,5 +351,105 @@ class CompensationIntegrationTest {
         expect(call(otherToken, "GET", C + "/cases/" + caseId + "/valuations", null), 404);
         expect(call(otherToken, "GET", C + "/cases/" + caseId + "/compensation-summary", null), 404);
         expect(call(otherToken, "POST", valuationPath(), null), 404);
+    }
+
+    @Test
+    void payments_areSplitExactly_released_failed_retried_andAlwaysSimulated() throws Exception {
+        snapshotOwners();
+        String valuation = approvedValuation();
+        String generate = C + "/valuations/" + valuation + "/payments";
+
+        expect(call(manager, "POST", generate, null), 403);
+        expect(call(field1, "POST", generate, null), 403);
+        MvcResult created = call(finance, "POST", generate, null);
+        expect(created, 201);
+        String body = created.getResponse().getContentAsString();
+        assertThat(body).contains("\"amount\":2820001.2").contains("\"amount\":1880000.8").contains("\"mode\":\"SIMULATED\"")
+                .contains("\"status\":\"INSTRUCTED\"").doesNotContain("DEMO Owner");
+        expect(call(finance, "POST", generate, null), 409);
+        String first = JsonPath.read(body, "$[0].id");
+        String second = JsonPath.read(body, "$[1].id");
+
+        String p1 = C + "/payments/" + first;
+        expect(call(manager, "POST", p1 + "/release", null), 403);
+        expect(call(authority, "POST", p1 + "/release", null), 403);
+        MvcResult sent = call(finance, "POST", p1 + "/release", null);
+        expect(sent, 200);
+        assertThat(sent.getResponse().getContentAsString()).contains("\"status\":\"SENT\"").contains("SIM-PFMS-").contains("\"attemptCount\":1");
+        expect(call(finance, "POST", p1 + "/release", null), 409);
+
+        expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"FAILED\"}"), 400);
+        expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"INSTRUCTED\"}"), 400);
+        expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"FAILED\",\"reason\":\"DEMO: simulated rejection\"}"), 200);
+        MvcResult retry = call(finance, "POST", p1 + "/release", null);
+        expect(retry, 200);
+        assertThat(retry.getResponse().getContentAsString()).contains("\"attemptCount\":2");
+        expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"CONFIRMED\"}"), 200);
+        expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"CONFIRMED\"}"), 409);
+
+        String p2 = C + "/payments/" + second;
+        expect(call(finance, "POST", p2 + "/release", null), 200);
+        expect(call(finance, "POST", p2 + "/simulate-response", "{\"outcome\":\"CONFIRMED\"}"), 200);
+
+        MvcResult summary = call(authority, "GET", C + "/cases/" + caseId + "/payment-summary", null);
+        expect(summary, 200);
+        assertThat(summary.getResponse().getContentAsString()).contains("\"mode\":\"SIMULATED\"")
+                .contains("\"confirmedAmount\":4700002.0").contains("\"failedAmount\":0");
+        mockMvc.perform(get(p1 + "/events").header("Authorization", finance)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(5));
+        expect(call(consultant, "GET", C + "/cases/" + caseId + "/payments", null), 403);
+    }
+
+    @Test
+    void rr_isAssessedApprovedByAnotherPerson_andDeliveredStepByStep() throws Exception {
+        String[] owners = snapshotOwners();
+        String relocation = "ITRELOC" + suffix;
+        String livelihood = "ITLIVEL" + suffix;
+//        expect(call(manager, "POST", C + "/rr/benefit-types", "{\"code\":\"" + relocation + "\",\"name\":\"DEMO relocation grant\","
+//                + "\"kind\":\"ONE_TIME_CASH\",\"defaultAmount\":50000,\"requiresDisplaced\":true}"), 403);
+        expect(call(manager, "POST", C + "/rr/benefit-types",
+                "{\"code\":\"ITRELOC_DENIED\",\"name\":\"DEMO relocation grant\","
+                        + "\"kind\":\"ONE_TIME_CASH\",\"defaultAmount\":50000,\"requiresDisplaced\":true}"), 403);
+        String relocationId = id(call(ruleMaker, "POST", C + "/rr/benefit-types", "{\"code\":\"" + relocation
+                + "\",\"name\":\"DEMO relocation grant\",\"kind\":\"ONE_TIME_CASH\",\"defaultAmount\":50000,\"requiresDisplaced\":true}"));
+        String livelihoodId = id(call(ruleMaker, "POST", C + "/rr/benefit-types", "{\"code\":\"" + livelihood
+                + "\",\"name\":\"DEMO livelihood allowance\",\"kind\":\"MONTHLY_ALLOWANCE\",\"defaultAmount\":3000,"
+                + "\"defaultMonths\":12,\"requiresLivelihoodLost\":true}"));
+        expect(call(ruleMaker, "POST", C + "/rr/benefit-types", "{\"code\":\"" + relocation + "\",\"name\":\"x\",\"kind\":\"OTHER\"}"), 409);
+
+        String rrCases = C + "/cases/" + caseId + "/rr-cases";
+        expect(call(manager, "POST", rrCases, "{\"landownerId\":\"" + UUID.randomUUID() + "\",\"displaced\":true,\"livelihoodLost\":false}"), 400);
+        MvcResult identified = call(manager, "POST", rrCases, "{\"landownerId\":\"" + owners[0] + "\",\"displaced\":true,\"livelihoodLost\":false}");
+        expect(identified, 201);
+        String rr = id(identified);
+        expect(call(manager, "POST", rrCases, "{\"landownerId\":\"" + owners[0] + "\",\"displaced\":true,\"livelihoodLost\":false}"), 409);
+
+        String base = C + "/rr-cases/" + rr;
+        expect(call(authority, "POST", base + "/approve", null), 409);
+        expect(call(manager, "POST", base + "/entitlements", "{\"benefitTypeId\":\"" + livelihoodId + "\"}"), 400);
+        MvcResult added = call(manager, "POST", base + "/entitlements", "{\"benefitTypeId\":\"" + relocationId + "\"}");
+        expect(added, 201);
+        assertThat(added.getResponse().getContentAsString()).contains("\"status\":\"ASSESSED\"").contains("\"amount\":50000")
+                .doesNotContain("DEMO Owner");
+        expect(call(manager, "POST", base + "/entitlements", "{\"benefitTypeId\":\"" + relocationId + "\"}"), 409);
+        String entitlementId = JsonPath.read(added.getResponse().getContentAsString(), "$.entitlements[0].id");
+
+//        String today = java.time.LocalDate.now().toString();
+        String today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+        expect(call(manager, "POST", base + "/approve", null), 403);
+        expect(call(manager, "POST", base + "/entitlements/" + entitlementId + "/deliver", "{\"deliveredOn\":\"" + today + "\"}"), 409);
+        expect(call(authority, "POST", base + "/approve", null), 200);
+        expect(call(manager, "POST", base + "/complete", null), 400);
+        expect(call(manager, "POST", base + "/entitlements/" + entitlementId + "/deliver",
+                "{\"deliveredOn\":\"" + java.time.LocalDate.now().plusDays(2) + "\"}"), 400);
+        expect(call(manager, "POST", base + "/entitlements/" + entitlementId + "/deliver",
+                "{\"deliveredOn\":\"" + today + "\",\"remarks\":\"DEMO: handed over\"}"), 200);
+        expect(call(manager, "POST", base + "/entitlements/" + entitlementId + "/deliver", "{\"deliveredOn\":\"" + today + "\"}"), 409);
+        MvcResult done = call(manager, "POST", base + "/complete", null);
+        expect(done, 200);
+        assertThat(done.getResponse().getContentAsString()).contains("\"status\":\"COMPLETED\"");
+
+        expect(call(finance, "GET", rrCases, null), 200);
+        expect(call(consultant, "GET", rrCases, null), 403);
     }
 }

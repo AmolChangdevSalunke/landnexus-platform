@@ -15,4 +15,12 @@ public final class CompTypes {
     public enum ValuationStatus { DRAFT, SUBMITTED, APPROVED, REJECTED, SUPERSEDED }
 
     public enum AssetCategory { BUILDING, TREE, WELL, CROP, OTHER }
+
+    public enum PaymentStatus { INSTRUCTED, SENT, CONFIRMED, FAILED }
+
+    public enum RrBenefitKind { ONE_TIME_CASH, MONTHLY_ALLOWANCE, HOUSING, EMPLOYMENT, OTHER }
+
+    public enum RrCaseStatus { IDENTIFIED, ASSESSED, APPROVED, COMPLETED }
+
+    public enum EntitlementStatus { PLANNED, DELIVERED }
 }

@@ -24,6 +24,10 @@ public class CompensationAccess {
         return actor.hasAuthority(READ) && geoScope.canAccessDistrict(actor, districtId);
     }
 
+    public boolean canView(CurrentActor actor, UUID districtId, String permission) {
+        return actor.hasAuthority(permission) && geoScope.canAccessDistrict(actor, districtId);
+    }
+
     public <T> Specification<T> visibleTo(CurrentActor actor) {
         if (!actor.hasAuthority(READ)) {
             return (root, query, cb) -> cb.disjunction();

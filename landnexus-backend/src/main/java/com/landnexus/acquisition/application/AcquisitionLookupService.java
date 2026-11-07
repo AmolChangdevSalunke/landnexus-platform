@@ -10,6 +10,10 @@ import com.landnexus.acquisition.infrastructure.AcquisitionCaseRepository;
 import com.landnexus.acquisition.infrastructure.AwardParcelRepository;
 import com.landnexus.acquisition.infrastructure.CaseParcelRepository;
 import com.landnexus.acquisition.infrastructure.LegalNoticeRepository;
+import com.landnexus.acquisition.domain.CaseParcelOwner;
+import com.landnexus.acquisition.infrastructure.CaseParcelOwnerRepository;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -35,15 +39,17 @@ public class AcquisitionLookupService {
     private final AwardParcelRepository awardParcels;
     private final CaseParcelRepository caseParcels;
     private final LegalNoticeRepository notices;
+    private final CaseParcelOwnerRepository caseParcelOwners;
 
     public AcquisitionLookupService(AcquisitionCaseRepository cases, AcquisitionAwardRepository awards,
                                     AwardParcelRepository awardParcels, CaseParcelRepository caseParcels,
-                                    LegalNoticeRepository notices) {
+                                    LegalNoticeRepository notices, CaseParcelOwnerRepository caseParcelOwners) {
         this.cases = cases;
         this.awards = awards;
         this.awardParcels = awardParcels;
         this.caseParcels = caseParcels;
         this.notices = notices;
+        this.caseParcelOwners = caseParcelOwners;
     }
 
     public Optional<CaseRef> findCase(UUID id) {
@@ -74,5 +80,24 @@ public class AcquisitionLookupService {
 
     public List<String> frameworks() {
         return Arrays.stream(AcquisitionFramework.values()).map(Enum::name).toList();
+    }
+
+    public record OwnerShareRef(UUID landownerId, BigDecimal sharePercent) {
+    }
+
+    /** The owners and shares recorded when the parcel was identified for the case (ids only). */
+    public List<OwnerShareRef> ownerSnapshot(UUID caseParcelId) {
+        return caseParcelOwners.findByCaseParcelIdIn(List.of(caseParcelId)).stream()
+                .map((CaseParcelOwner o) -> new OwnerShareRef(o.getLandownerId(), o.getSharePercent())).toList();
+    }
+
+    public Set<UUID> caseLandownerIds(UUID caseId) {
+        List<UUID> ids = caseParcels.findByCaseIdAndReleasedAtIsNullOrderByIdentifiedAtAsc(caseId).stream()
+                .map(CaseParcel::getId).toList();
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+        return caseParcelOwners.findByCaseParcelIdIn(ids).stream().map(CaseParcelOwner::getLandownerId)
+                .collect(Collectors.toSet());
     }
 }
