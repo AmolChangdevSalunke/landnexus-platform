@@ -40,4 +40,13 @@ public class LandRecordsLookupService {
                 .map((ParcelOwnership o) -> new OwnerShareRef(o.getLandownerId(), o.getSharePercent()))
                 .toList();
     }
+
+    public Optional<String> classificationOf(UUID parcelId) {
+        return parcels.findById(parcelId).map(p -> p.getClassification().name());
+    }
+
+    public List<String> classifications() {
+        return java.util.Arrays.stream(com.landnexus.landrecords.domain.LandTypes.LandClassification.values())
+                .map(Enum::name).toList();
+    }
 }

@@ -1,0 +1,336 @@
+package com.landnexus.compensation.api;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+
+import com.jayway.jsonpath.JsonPath;
+import com.landnexus.administration.domain.UserAccount;
+import com.landnexus.administration.infrastructure.RoleRepository;
+import com.landnexus.administration.infrastructure.UserAccountRepository;
+import java.util.Locale;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+
+/** Real database, real filter chain, real tokens, synthetic DEMO data only. */
+@SpringBootTest
+class CompensationIntegrationTest {
+
+    private static final String PASSWORD = "Test-Passw0rd-123";
+    private static final String ADMIN = "/api/v1/administration";
+    private static final String LR = "/api/v1/land-records";
+    private static final String C = "/api/v1/compensation";
+
+    @Autowired private WebApplicationContext context;
+    @Autowired private UserAccountRepository users;
+    @Autowired private RoleRepository roles;
+    @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private JdbcTemplate jdbc;
+
+    private MockMvc mockMvc;
+    private String suffix, prefix, stateCode, ruleSetName;
+    private String state, district1, village1, village2, parcelId;
+    private UUID projectId, caseId, caseParcelId, authorityId;
+    private String ruleMaker, ruleApprover, manager, authority, finance, field1, field2, consultant;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        mockMvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+        suffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+        prefix = "it6-" + suffix.toLowerCase(Locale.ROOT) + "-";
+        stateCode = "ITC" + suffix;
+        ruleSetName = "IT6-" + suffix;
+
+        state = admin("/states", "{\"code\":\"" + stateCode + "\",\"name\":\"Compensation Test State\"}");
+        district1 = admin("/districts", "{\"code\":\"D1\",\"name\":\"District One\",\"stateId\":\"" + state + "\"}");
+        String district2 = admin("/districts", "{\"code\":\"D2\",\"name\":\"District Two\",\"stateId\":\"" + state + "\"}");
+        String taluka1 = admin("/talukas", "{\"code\":\"T1\",\"name\":\"Taluka One\",\"districtId\":\"" + district1 + "\"}");
+        admin("/talukas", "{\"code\":\"T2\",\"name\":\"Taluka Two\",\"districtId\":\"" + district2 + "\"}");
+        village1 = admin("/villages", "{\"code\":\"V1\",\"name\":\"Village One\",\"talukaId\":\"" + taluka1 + "\"}");
+        String ministry = admin("/ministries", "{\"code\":\"ITCM" + suffix + "\",\"name\":\"Test Ministry\"}");
+        String department = admin("/departments", "{\"code\":\"ITCD" + suffix + "\",\"name\":\"Test Department\",\"ministryId\":\""
+                + ministry + "\",\"level\":\"STATE\"}");
+
+        user("rulemaker", "CENTRAL_ADMIN");
+        user("ruleapprover", "SUPER_ADMIN");
+        UUID mgr = user("manager", "SCRUTINY_OFFICER");
+        authorityId = user("authority", "COMPETENT_AUTHORITY");
+        UUID fin = user("finance", "FINANCE_OFFICER");
+        UUID f1 = user("field1", "FIELD_OFFICER");
+        UUID f2 = user("field2", "FIELD_OFFICER");
+        UUID con = user("consultant", "CONSULTANT");
+        for (UUID u : new UUID[] {mgr, authorityId, fin, f1}) {
+            scope(u, district1);
+        }
+        scope(f2, district2);
+        ruleMaker = login("rulemaker");
+        ruleApprover = login("ruleapprover");
+        manager = login("manager");
+        authority = login("authority");
+        finance = login("finance");
+        field1 = login("field1");
+        field2 = login("field2");
+        consultant = login("consultant");
+
+        UUID proposalId = UUID.randomUUID();
+        projectId = UUID.randomUUID();
+        jdbc.update("INSERT INTO proposals (id, proposal_number, title, project_type, status, version_no, state_id, district_id, "
+                        + "department_id, estimated_land_area_ha, description, planned_start_date, planned_end_date, owner_user_id, submitted_at) "
+                        + "VALUES (?, ?, 'DEMO IT proposal', 'STATE_HIGHWAY', 'APPROVED', 1, ?, ?, ?, 10, 'DEMO', DATE '2027-01-01', DATE '2028-01-01', ?, now())",
+                proposalId, "PRP-IT6-" + suffix, UUID.fromString(state), UUID.fromString(district1), UUID.fromString(department), con);
+        jdbc.update("INSERT INTO projects (id, code, proposal_id, title, project_type, status, state_id, district_id, department_id, "
+                        + "estimated_land_area_ha, owner_user_id, approved_by_user_id, approved_at) "
+                        + "VALUES (?, ?, ?, 'DEMO IT project', 'STATE_HIGHWAY', 'ACTIVE', ?, ?, ?, 10, ?, ?, now())",
+                projectId, "PRJ-IT6-" + suffix, proposalId, UUID.fromString(state), UUID.fromString(district1),
+                UUID.fromString(department), con, authorityId);
+        jdbc.update("INSERT INTO project_villages (project_id, village_id) VALUES (?, ?)", projectId, UUID.fromString(village1));
+
+        // a parcel through the real API, then a case that already has its award (Module 4 is tested on its own)
+        parcelId = id(call(field1, "POST", LR + "/parcels", "{\"villageId\":\"" + village1 + "\",\"gatNumber\":\"DEMO-701\",\"areaHa\":2.0,"
+                + "\"classification\":\"AGRICULTURAL_DRY\",\"landUse\":\"CULTIVATION\"}"));
+        caseId = UUID.randomUUID();
+        caseParcelId = UUID.randomUUID();
+        UUID awardId = UUID.randomUUID();
+        jdbc.update("INSERT INTO acquisition_cases (id, case_number, project_id, state_id, district_id, framework, status) "
+                        + "VALUES (?, ?, ?, ?, ?, 'LARR_2013', 'AWARD_DECLARED')", caseId, "ACQ-IT6-" + suffix, projectId,
+                UUID.fromString(state), UUID.fromString(district1));
+        jdbc.update("INSERT INTO case_parcels (id, case_id, parcel_id, village_id, area_to_acquire_ha) VALUES (?, ?, ?, ?, 1.5)",
+                caseParcelId, caseId, UUID.fromString(parcelId), UUID.fromString(village1));
+        jdbc.update("INSERT INTO legal_notices (case_id, notice_type, reference_number, issued_on, objection_deadline) "
+                + "VALUES (?, 'PRELIMINARY_NOTIFICATION', ?, CURRENT_DATE - 60, CURRENT_DATE - 30)", caseId, "DEMO-GZ-" + suffix);
+        jdbc.update("INSERT INTO acquisition_awards (id, case_id, award_number, award_date, declared_by_user_id) "
+                + "VALUES (?, ?, ?, CURRENT_DATE - 10, ?)", awardId, caseId, "DEMO-AW-" + suffix, authorityId);
+        jdbc.update("INSERT INTO award_parcels (award_id, case_parcel_id, awarded_area_ha) VALUES (?, ?, 1.5)", awardId, caseParcelId);
+    }
+
+    @AfterEach
+    void cleanUp() {
+        String like = prefix + "%";
+        String owners = "(SELECT id FROM users WHERE username LIKE ?)";
+        jdbc.update("DELETE FROM valuation_lines WHERE valuation_id IN (SELECT id FROM valuations WHERE case_id = ?)", caseId);
+        jdbc.update("DELETE FROM valuations WHERE case_id = ?", caseId);
+        jdbc.update("DELETE FROM asset_records WHERE case_parcel_id = ?", caseParcelId);
+        jdbc.update("DELETE FROM case_parcel_owners WHERE case_parcel_id = ?", caseParcelId);
+        jdbc.update("DELETE FROM award_parcels WHERE award_id IN (SELECT id FROM acquisition_awards WHERE case_id = ?)", caseId);
+        jdbc.update("DELETE FROM acquisition_awards WHERE case_id = ?", caseId);
+        jdbc.update("DELETE FROM legal_notices WHERE case_id = ?", caseId);
+        jdbc.update("DELETE FROM case_parcels WHERE case_id = ?", caseId);
+        jdbc.update("DELETE FROM acquisition_cases WHERE id = ?", caseId);
+        try {
+            jdbc.execute("ALTER TABLE rule_set_components DISABLE TRIGGER trg_rule_set_components_append_only");
+            jdbc.update("DELETE FROM rule_set_components WHERE rule_set_id IN (SELECT id FROM valuation_rule_sets WHERE name = ?)", ruleSetName);
+        } finally {
+            jdbc.execute("ALTER TABLE rule_set_components ENABLE TRIGGER trg_rule_set_components_append_only");
+        }
+        jdbc.update("DELETE FROM valuation_rule_sets WHERE name = ?", ruleSetName);
+        jdbc.update("DELETE FROM market_value_rates WHERE district_id IN (SELECT d.id FROM districts d JOIN states s ON s.id = d.state_id WHERE s.code = ?)", stateCode);
+        jdbc.update("DELETE FROM notifications WHERE recipient_user_id IN " + owners, like);
+        jdbc.update("DELETE FROM project_villages WHERE project_id = ?", projectId);
+        jdbc.update("DELETE FROM projects WHERE id = ?", projectId);
+        jdbc.update("DELETE FROM proposals WHERE proposal_number = ?", "PRP-IT6-" + suffix);
+        String parcels = "(SELECT p.id FROM land_parcels p JOIN districts d ON d.id = p.district_id JOIN states s ON s.id = d.state_id WHERE s.code = ?)";
+        jdbc.update("DELETE FROM parcel_ownerships WHERE parcel_id IN " + parcels, stateCode);
+        jdbc.update("DELETE FROM land_parcels WHERE id IN " + parcels, stateCode);
+        jdbc.update("DELETE FROM landowners WHERE district_id IN (SELECT d.id FROM districts d JOIN states s ON s.id = d.state_id WHERE s.code = ?)", stateCode);
+        jdbc.update("DELETE FROM user_geographic_scopes WHERE user_id IN " + owners, like);
+        jdbc.update("DELETE FROM refresh_tokens WHERE user_id IN " + owners, like);
+        jdbc.update("DELETE FROM user_roles WHERE user_id IN " + owners, like);
+        jdbc.update("DELETE FROM users WHERE username LIKE ?", like);
+        jdbc.update("DELETE FROM villages WHERE taluka_id IN (SELECT t.id FROM talukas t JOIN districts d ON d.id = t.district_id JOIN states s ON s.id = d.state_id WHERE s.code = ?)", stateCode);
+        jdbc.update("DELETE FROM talukas WHERE district_id IN (SELECT d.id FROM districts d JOIN states s ON s.id = d.state_id WHERE s.code = ?)", stateCode);
+        jdbc.update("DELETE FROM districts WHERE state_id IN (SELECT id FROM states WHERE code = ?)", stateCode);
+        jdbc.update("DELETE FROM states WHERE code = ?", stateCode);
+        jdbc.update("DELETE FROM departments WHERE code = ?", "ITCD" + suffix);
+        jdbc.update("DELETE FROM ministries WHERE code = ?", "ITCM" + suffix);
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    private RequestPostProcessor adminToken() {
+        return jwt().jwt(j -> j.subject(UUID.randomUUID().toString()).claim("username", "it-actor"))
+                .authorities(new SimpleGrantedAuthority("ROLE_CENTRAL_ADMIN"), new SimpleGrantedAuthority("MASTER_DATA_WRITE"),
+                        new SimpleGrantedAuthority("USER_WRITE"));
+    }
+
+    private String admin(String path, String json) throws Exception {
+        MvcResult r = mockMvc.perform(post(ADMIN + path).with(adminToken()).contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isCreated()).andReturn();
+        return JsonPath.read(r.getResponse().getContentAsString(), "$.id");
+    }
+
+    private UUID user(String name, String role) {
+        UserAccount u = new UserAccount();
+        u.setUsername(prefix + name);
+        u.setEmail(prefix + name + "@test.invalid");
+        u.setFullName("Integration " + name);
+        u.setPasswordHash(passwordEncoder.encode(PASSWORD));
+        u.setEnabled(true);
+        u.getRoles().add(roles.findByCode(role).orElseThrow());
+        return users.saveAndFlush(u).getId();
+    }
+
+    private void scope(UUID userId, String districtId) throws Exception {
+        mockMvc.perform(put(ADMIN + "/users/" + userId + "/scopes").with(adminToken()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"scopes\":[{\"districtId\":\"" + districtId + "\"}]}")).andExpect(status().isOk());
+    }
+
+    private String login(String name) throws Exception {
+        MvcResult r = mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + prefix + name + "\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk()).andReturn();
+        return "Bearer " + JsonPath.<String>read(r.getResponse().getContentAsString(), "$.accessToken");
+    }
+
+    private MvcResult call(String token, String method, String path, String json) throws Exception {
+        var request = "POST".equals(method) ? post(path) : "PUT".equals(method) ? put(path) : get(path);
+        request = request.header("Authorization", token);
+        if (json != null) {
+            request = request.contentType(MediaType.APPLICATION_JSON).content(json);
+        }
+        return mockMvc.perform(request).andReturn();
+    }
+
+    private void expect(MvcResult r, int code) {
+        assertThat(r.getResponse().getStatus()).as("%s %s", r.getRequest().getMethod(), r.getRequest().getRequestURI()).isEqualTo(code);
+    }
+
+    private String id(MvcResult r) throws Exception {
+        return JsonPath.read(r.getResponse().getContentAsString(), "$.id");
+    }
+
+    private String rateJson() {
+        return "{\"villageId\":\"" + village1 + "\",\"classification\":\"AGRICULTURAL_DRY\",\"ratePerHa\":1000000,"
+                + "\"effectiveFrom\":\"2020-01-01\",\"sourceNote\":\"DEMO illustrative rate\"}";
+    }
+
+    private String ruleSetJson(String multiplier) {
+        return "{\"name\":\"" + ruleSetName + "\",\"framework\":\"LARR_2013\",\"districtId\":\"" + district1
+                + "\",\"effectiveFrom\":\"2020-01-01\",\"description\":\"DEMO illustrative rule set, not a real law\",\"components\":["
+                + "{\"code\":\"LAND\",\"name\":\"Land value\",\"type\":\"LAND_VALUE\",\"factor\":" + multiplier + "},"
+                + "{\"code\":\"ASSETS\",\"name\":\"Assets\",\"type\":\"ASSET_VALUE\"},"
+                + "{\"code\":\"SOLATIUM\",\"name\":\"Solatium\",\"type\":\"PERCENT_OF\",\"factor\":100,\"baseCodes\":[\"LAND\",\"ASSETS\"]}]}";
+    }
+
+    private static final String ASSET = "{\"category\":\"BUILDING\",\"description\":\"DEMO shed\",\"quantity\":2,\"unit\":\"nos\",\"unitValue\":50000.50}";
+
+    private String valuationPath() {
+        return C + "/cases/" + caseId + "/parcels/" + caseParcelId + "/valuations";
+    }
+
+    /** rate + rule set approved by a second person, one asset, estimate computed, submitted and approved. */
+    private String approvedValuation() throws Exception {
+        String rate = id(call(ruleMaker, "POST", C + "/rates", rateJson()));
+        expect(call(ruleApprover, "POST", C + "/rates/" + rate + "/approve", null), 200);
+        String rs = id(call(ruleMaker, "POST", C + "/rule-sets", ruleSetJson("1.5")));
+        expect(call(ruleApprover, "POST", C + "/rule-sets/" + rs + "/approve", null), 200);
+        expect(call(manager, "POST", C + "/cases/" + caseId + "/parcels/" + caseParcelId + "/assets", ASSET), 201);
+        String valuation = id(call(manager, "POST", valuationPath(), null));
+        expect(call(manager, "POST", C + "/valuations/" + valuation + "/submit", null), 200);
+        expect(call(authority, "POST", C + "/valuations/" + valuation + "/approve", null), 200);
+        return valuation;
+    }
+
+    // ------------------------------------------------------------------ tests
+
+    @Test
+    void ratesAndRuleSets_needASecondPerson_andFollowTheirRules() throws Exception {
+        expect(call(manager, "POST", C + "/rates", rateJson()), 403);
+        String rate = id(call(ruleMaker, "POST", C + "/rates", rateJson()));
+        expect(call(ruleMaker, "POST", C + "/rates", rateJson()), 409);
+        expect(call(ruleMaker, "POST", C + "/rates/" + rate + "/approve", null), 403);
+        expect(call(ruleApprover, "POST", C + "/rates/" + rate + "/reject", "{\"remarks\":\"\"}"), 400);
+        expect(call(ruleApprover, "POST", C + "/rates/" + rate + "/approve", null), 200);
+        expect(call(ruleApprover, "POST", C + "/rates/" + rate + "/approve", null), 409);
+
+        expect(call(manager, "POST", C + "/rule-sets", ruleSetJson("1.5")), 403);
+        expect(call(ruleMaker, "POST", C + "/rule-sets", ruleSetJson("11")), 400);
+        expect(call(ruleMaker, "POST", C + "/rule-sets", "{\"name\":\"" + ruleSetName + "\",\"framework\":\"LARR_2013\","
+                + "\"effectiveFrom\":\"2020-01-01\",\"components\":[{\"code\":\"ASSETS\",\"name\":\"A\",\"type\":\"ASSET_VALUE\"}]}"), 400);
+        String rs = id(call(ruleMaker, "POST", C + "/rule-sets", ruleSetJson("1.5")));
+        expect(call(ruleMaker, "POST", C + "/rule-sets/" + rs + "/approve", null), 403);
+        expect(call(ruleApprover, "POST", C + "/rule-sets/" + rs + "/approve", null), 200);
+        expect(call(ruleApprover, "POST", C + "/rule-sets/" + rs + "/approve", null), 409);
+        expect(call(finance, "GET", C + "/rule-sets/" + rs, null), 200);
+        expect(call(consultant, "GET", C + "/rule-sets/" + rs, null), 403);
+    }
+
+    @Test
+    void estimate_isComputedReproducibly_andApprovedByAnotherPerson() throws Exception {
+        // a rule set alone is not enough: the market value rate must also be approved
+        String rs = id(call(ruleMaker, "POST", C + "/rule-sets", ruleSetJson("1.5")));
+        expect(call(ruleApprover, "POST", C + "/rule-sets/" + rs + "/approve", null), 200);
+        String rate = id(call(ruleMaker, "POST", C + "/rates", rateJson()));
+        expect(call(manager, "POST", valuationPath(), null), 400);
+        expect(call(ruleApprover, "POST", C + "/rates/" + rate + "/approve", null), 200);
+
+        String assets = C + "/cases/" + caseId + "/parcels/" + caseParcelId + "/assets";
+        expect(call(field1, "POST", assets, ASSET), 403);
+        expect(call(field2, "POST", assets, ASSET), 403);
+        expect(call(manager, "POST", assets, ASSET), 201);
+        expect(call(finance, "GET", assets, null), 200);
+
+        expect(call(finance, "POST", valuationPath(), null), 403);
+        MvcResult first = call(manager, "POST", valuationPath(), null);
+        expect(first, 201);
+        String body = first.getResponse().getContentAsString();
+        assertThat(body).contains("\"totalAmount\":4700002.0").contains("\"versionNo\":1").contains("\"status\":\"DRAFT\"")
+                .contains(ruleSetName);
+        mockMvc.perform(get(C + "/valuations/" + id(first)).header("Authorization", finance))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.lines.length()").value(3));
+
+        MvcResult second = call(manager, "POST", valuationPath(), null);
+        expect(second, 201);
+        assertThat(second.getResponse().getContentAsString()).contains("\"versionNo\":2").contains("\"totalAmount\":4700002.0");
+        String valuation = id(second);
+
+        expect(call(field1, "GET", C + "/cases/" + caseId + "/valuations", null), 403);
+        expect(call(field2, "GET", C + "/cases/" + caseId + "/valuations", null), 403);
+        expect(call(finance, "POST", C + "/valuations/" + valuation + "/submit", null), 403);
+        expect(call(manager, "POST", C + "/valuations/" + valuation + "/submit", null), 200);
+
+        // a submitted estimate is frozen
+        expect(call(manager, "POST", valuationPath(), null), 409);
+        expect(call(manager, "POST", assets, ASSET), 409);
+        expect(call(manager, "POST", C + "/valuations/" + valuation + "/approve", null), 403);
+        expect(call(authority, "POST", C + "/valuations/" + valuation + "/reject", "{\"remarks\":\"\"}"), 400);
+        expect(call(authority, "POST", C + "/valuations/" + valuation + "/approve", "{\"remarks\":\"DEMO: checked\"}"), 200);
+        expect(call(authority, "POST", C + "/valuations/" + valuation + "/approve", null), 409);
+
+        MvcResult summary = call(finance, "GET", C + "/cases/" + caseId + "/compensation-summary", null);
+        expect(summary, 200);
+        assertThat(summary.getResponse().getContentAsString()).contains("\"approved\":1").contains("\"approvedTotal\":4700002.0");
+        expect(call(consultant, "GET", C + "/cases/" + caseId + "/compensation-summary", null), 403);
+    }
+
+    @Test
+    void aCaseOutsideTheCallersDistrict_isNotFound() throws Exception {
+        approvedValuation();
+        // field2 has no valuation permission at all, so the scope rule is shown with a user who has both
+        UUID other = user("otherdistrict", "SCRUTINY_OFFICER");
+        scope(other, jdbc.queryForObject("SELECT d.id::text FROM districts d JOIN states s ON s.id = d.state_id WHERE s.code = ? AND d.code = 'D2'",
+                String.class, stateCode));
+        String otherToken = login("otherdistrict");
+
+        expect(call(otherToken, "GET", C + "/cases/" + caseId + "/valuations", null), 404);
+        expect(call(otherToken, "GET", C + "/cases/" + caseId + "/compensation-summary", null), 404);
+        expect(call(otherToken, "POST", valuationPath(), null), 404);
+    }
+}

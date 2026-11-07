@@ -175,6 +175,11 @@ public class GeoScopeService {
         return saved.stream().map(ScopeEntryResponse::from).toList();
     }
 
+    public boolean stateIsActive(UUID id) {
+        return states.findById(id)
+                .filter(s -> s.getStatus() == com.landnexus.administration.domain.RecordStatus.ACTIVE).isPresent();
+    }
+
     private District findDistrict(UUID districtId) {
         return districts.findById(districtId)
                 .orElseThrow(() -> new ResourceNotFoundException("District not found: " + districtId));
