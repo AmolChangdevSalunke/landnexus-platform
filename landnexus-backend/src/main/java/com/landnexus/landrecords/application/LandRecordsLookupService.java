@@ -49,4 +49,8 @@ public class LandRecordsLookupService {
         return java.util.Arrays.stream(com.landnexus.landrecords.domain.LandTypes.LandClassification.values())
                 .map(Enum::name).toList();
     }
+    /** Parcel ids of a village (at most 2000), for map layers. */
+    public List<UUID> parcelIdsInVillage(UUID villageId) {
+        return parcels.findIdsByVillageId(villageId).stream().limit(2000).toList();
+    }
 }

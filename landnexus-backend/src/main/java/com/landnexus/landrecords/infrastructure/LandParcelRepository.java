@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.List;
 
 public interface LandParcelRepository extends JpaRepository<LandParcel, UUID>, JpaSpecificationExecutor<LandParcel> {
 
@@ -20,4 +21,6 @@ public interface LandParcelRepository extends JpaRepository<LandParcel, UUID>, J
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from LandParcel p where p.id = :id")
     Optional<LandParcel> findByIdForUpdate(@Param("id") UUID id);
+    @Query("select p.id from LandParcel p where p.villageId = :villageId")
+    List<UUID> findIdsByVillageId(@Param("villageId") UUID villageId);
 }
