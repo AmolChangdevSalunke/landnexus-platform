@@ -46,6 +46,9 @@ class GisIntegrationTest {
     private static final String WITH_Z = "{\"type\":\"Polygon\",\"coordinates\":[[[75.3400,19.8700,500],[75.3410,19.8700,500],[75.3410,19.8710,500],[75.3400,19.8710,500],[75.3400,19.8700,500]]]}";
     private static final String LINE = "{\"type\":\"LineString\",\"coordinates\":[[75.30,19.80],[75.35,19.85],[75.40,19.90]]}";
 
+    private static final String FOREST_SQUARE = "{\"type\":\"Polygon\",\"coordinates\":[[[75.3405,19.8702],[75.3415,19.8702],[75.3415,19.8708],[75.3405,19.8708],[75.3405,19.8702]]]}";
+    private static final String THROUGH = "{\"type\":\"LineString\",\"coordinates\":[[75.3395,19.8705],[75.3415,19.8705]]}";
+
     @Autowired private WebApplicationContext context;
     @Autowired private UserAccountRepository users;
     @Autowired private RoleRepository roles;
@@ -106,18 +109,20 @@ class GisIntegrationTest {
     void cleanUp() {
         String like = prefix + "%";
         String owners = "(SELECT id FROM users WHERE username LIKE ?)";
+        String parcels = "(SELECT p.id FROM land_parcels p JOIN districts d ON d.id = p.district_id JOIN states s ON s.id = d.state_id WHERE s.code = ?)";
         try {
             jdbc.execute("ALTER TABLE parcel_boundaries DISABLE TRIGGER trg_parcel_boundaries_no_delete");
             jdbc.execute("ALTER TABLE project_alignments DISABLE TRIGGER trg_project_alignments_no_delete");
-            jdbc.update("DELETE FROM parcel_boundaries WHERE parcel_id = ?::uuid", parcelId);
+            jdbc.update("DELETE FROM parcel_boundaries WHERE parcel_id IN " + parcels, stateCode);
             jdbc.update("DELETE FROM project_alignments WHERE project_id = ?", projectId);
         } finally {
             jdbc.execute("ALTER TABLE parcel_boundaries ENABLE TRIGGER trg_parcel_boundaries_no_delete");
             jdbc.execute("ALTER TABLE project_alignments ENABLE TRIGGER trg_project_alignments_no_delete");
         }
+        jdbc.update("DELETE FROM project_villages WHERE project_id = ?", projectId);
         jdbc.update("DELETE FROM projects WHERE id = ?", projectId);
         jdbc.update("DELETE FROM proposals WHERE proposal_number = ?", "PRP-IT7-" + suffix);
-        jdbc.update("DELETE FROM land_parcels WHERE id = ?::uuid", parcelId);
+        jdbc.update("DELETE FROM land_parcels WHERE id IN " + parcels, stateCode);
         jdbc.update("DELETE FROM user_geographic_scopes WHERE user_id IN " + owners, like);
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id IN " + owners, like);
         jdbc.update("DELETE FROM user_roles WHERE user_id IN " + owners, like);
@@ -252,5 +257,39 @@ class GisIntegrationTest {
         assertThat(body(corridor)).contains("Polygon").contains("CORRIDOR");
         expect(call(field2, "GET", GIS + "/projects/" + projectId + "/corridor", null), 404);
         expect(call(finance, "GET", path + "/history", null), 200);
+    }
+
+    @Test
+    void conflictReport_findsCrossedParcels_forestOverlap_missingBoundaries_andDrawsTheMap() throws Exception {
+        jdbc.update("INSERT INTO project_villages (project_id, village_id) VALUES (?, ?)", projectId, UUID.fromString(village1));
+        String forest = JsonPath.read(call(field1, "POST", LR + "/parcels", "{\"villageId\":\"" + village1 + "\",\"gatNumber\":\"DEMO-802\","
+                + "\"areaHa\":0.5,\"classification\":\"FOREST\",\"landUse\":\"VACANT\"}").getResponse().getContentAsString(), "$.id");
+        expect(call(field1, "POST", LR + "/parcels", "{\"villageId\":\"" + village1 + "\",\"gatNumber\":\"DEMO-803\","
+                + "\"areaHa\":0.5,\"classification\":\"AGRICULTURAL_DRY\",\"landUse\":\"CULTIVATION\"}"), 201);
+
+        String conflicts = GIS + "/projects/" + projectId + "/conflicts";
+        expect(call(field1, "GET", conflicts, null), 404);   // no alignment yet
+        expect(call(field1, "PUT", GIS + "/parcels/" + parcelId + "/boundary", SQUARE), 200);
+        expect(call(field1, "PUT", GIS + "/parcels/" + forest + "/boundary", FOREST_SQUARE), 200);
+        expect(call(field1, "PUT", GIS + "/projects/" + projectId + "/alignment?corridorWidthM=60", THROUGH), 200);
+
+        expect(call(consultant, "GET", conflicts, null), 403);
+        expect(call(field2, "GET", conflicts, null), 404);
+        MvcResult report = call(finance, "GET", conflicts, null);
+        expect(report, 200);
+        String json = body(report);
+        assertThat(JsonPath.<Integer>read(json, "$.affectedParcelCount")).isEqualTo(2);
+        assertThat(JsonPath.<Number>read(json, "$.parcelsInProjectVillages").intValue()).isEqualTo(3);
+        assertThat(JsonPath.<Number>read(json, "$.parcelsWithBoundary").intValue()).isEqualTo(2);
+        assertThat(JsonPath.<Integer>read(json, "$.warnings")).isGreaterThanOrEqualTo(2);
+        assertThat(json).contains("FOREST_LAND").contains("PARCEL_OVERLAP").contains("NO_ACQUISITION_CASE_YET")
+                .contains("PARCELS_WITHOUT_BOUNDARY").contains("limitations");
+        java.util.List<Number> affected = JsonPath.read(json, "$.affectedParcels[?(@.gatNumber=='DEMO-801')].affectedHa");
+        assertThat(affected.get(0).doubleValue()).isBetween(0.55, 0.70);   // about 105 m of corridor, 60 m wide
+
+        MvcResult map = call(finance, "GET", GIS + "/projects/" + projectId + "/map", null);
+        expect(map, 200);
+        assertThat(body(map)).contains("FeatureCollection").contains("CORRIDOR").contains("ALIGNMENT").contains("PARCEL").contains(parcelId);
+        expect(call(field2, "GET", GIS + "/projects/" + projectId + "/map", null), 404);
     }
 }
