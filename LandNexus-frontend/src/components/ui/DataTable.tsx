@@ -22,6 +22,7 @@ export interface DataTableProps<T> {
   emptyAction?: ReactNode
   caption?: string
   onRowClick?: (row: T) => void
+  rowSelected?: (row: T) => boolean
   page?: number
   size?: number
   totalElements?: number
@@ -42,6 +43,7 @@ export function DataTable<T>({
   emptyAction,
   caption,
   onRowClick,
+  rowSelected,
   page = 0,
   size = 20,
   totalElements = rows.length,
@@ -100,6 +102,7 @@ export function DataTable<T>({
               rows.map((row) => (
                 <tr
                   key={rowKey(row)}
+                  aria-current={rowSelected?.(row) ? 'true' : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   onKeyDown={
                     onRowClick
@@ -115,6 +118,7 @@ export function DataTable<T>({
                   className={cn(
                     'transition-colors',
                     onRowClick ? 'cursor-pointer hover:bg-blue-50/50' : 'hover:bg-slate-50',
+                    rowSelected?.(row) ? 'bg-blue-50' : null,
                   )}
                 >
                   {columns.map((column) => (

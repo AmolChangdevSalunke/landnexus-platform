@@ -333,8 +333,9 @@ export function GisMapPage() {
 
       <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <Badge variant="neutral">No invented geometry</Badge>
-        Project locations are district-level only. Parcel boundaries, alignments and owner data
-        are not part of F5 and remain planned for a later GIS phase.
+        This page shows project locations at district level only. Parcel boundaries, alignments and
+        the conflict report are on each project and parcel details page, and are drawn only from
+        officer-entered GeoJSON. No owner data appears here.
       </p>
     </>
   )

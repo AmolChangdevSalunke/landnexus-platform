@@ -14,6 +14,17 @@ import { ProposalFormPage } from '../features/proposals/ProposalFormPage'
 import { ProposalListPage } from '../features/proposals/ProposalListPage'
 import { NotFoundPage } from '../features/shared/NotFoundPage'
 import { GisMapPage } from '../features/gis/GisMapPage'
+import { CaseDetailsPage } from '../features/acquisition/CaseDetailsPage'
+import { CaseFormPage } from '../features/acquisition/CaseFormPage'
+import { CaseListPage } from '../features/acquisition/CaseListPage'
+import { MySurveysPage } from '../features/acquisition/MySurveysPage'
+import { SurveyFormPage } from '../features/acquisition/SurveyFormPage'
+import { BenefitCataloguePage } from '../features/compensation/BenefitCataloguePage'
+import { RateRulesPage } from '../features/compensation/RateRulesPage'
+import { LandownerListPage } from '../features/landRecords/LandownerListPage'
+import { ParcelDetailsPage } from '../features/landRecords/ParcelDetailsPage'
+import { ParcelFormPage } from '../features/landRecords/ParcelFormPage'
+import { ParcelListPage } from '../features/landRecords/ParcelListPage'
 import { MasterDataPage } from '../features/admin/master/MasterDataPage'
 import { AuditTrailPage } from '../features/admin/users/AuditTrailPage'
 import { LoginHistoryPage } from '../features/admin/users/LoginHistoryPage'
@@ -95,6 +106,114 @@ export function AppRoutes() {
             }
           />
 
+          <Route
+            path="land/parcels"
+            element={
+              <RequirePermission any={[PERMISSION.LAND_RECORD_READ]}>
+                <ParcelListPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="land/parcels/new"
+            element={
+              <RequirePermission any={[PERMISSION.LAND_RECORD_WRITE]}>
+                <ParcelFormPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="land/parcels/:id"
+            element={
+              <RequirePermission any={[PERMISSION.LAND_RECORD_READ]}>
+                <ParcelDetailsPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="land/parcels/:id/edit"
+            element={
+              <RequirePermission any={[PERMISSION.LAND_RECORD_WRITE]}>
+                <ParcelFormPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="land/landowners"
+            element={
+              <RequirePermission any={[PERMISSION.LANDOWNER_READ]}>
+                <LandownerListPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition"
+            element={
+              <RequirePermission any={[PERMISSION.ACQUISITION_READ]}>
+                <CaseListPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition/new"
+            element={
+              <RequirePermission any={[PERMISSION.ACQUISITION_MANAGE]}>
+                <CaseFormPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition/my-surveys"
+            element={
+              <RequirePermission any={[PERMISSION.SURVEY_PERFORM]}>
+                <MySurveysPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition/:id/surveys/:caseParcelId/new"
+            element={
+              <RequirePermission any={[PERMISSION.SURVEY_PERFORM]}>
+                <SurveyFormPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition/:id"
+            element={
+              <RequirePermission any={[PERMISSION.ACQUISITION_READ]}>
+                <CaseDetailsPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="compensation/rules"
+            element={
+              <RequirePermission any={[PERMISSION.VALUATION_READ]}>
+                <RateRulesPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="compensation/rr/benefits"
+            element={
+              <RequirePermission any={[PERMISSION.RR_CATALOGUE]}>
+                <BenefitCataloguePage />
+              </RequirePermission>
+            }
+          />
+
           <Route path="notifications" element={<NotificationListPage />} />
 
           <Route path="admin" element={<Navigate to="/admin/master/ministries" replace />} />
@@ -146,7 +265,10 @@ export function AppRoutes() {
 
           <Route path="404" element={<NotFoundPage />} />
           <Route path="403" element={<NoAccessPage />} />
-          <Route path="roadmap" element={<Navigate to="/roadmap/land-records" replace />} />
+          <Route
+            path="roadmap"
+            element={<Navigate to="/roadmap/valuation-compensation" replace />}
+          />
           <Route path="roadmap/gis" element={<Navigate to="/gis" replace />} />
           <Route path="roadmap/:module" element={<RoadmapPage />} />
           <Route path="*" element={<NotFoundPage />} />

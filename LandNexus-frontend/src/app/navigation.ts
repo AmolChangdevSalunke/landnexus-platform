@@ -13,7 +13,6 @@ import {
   Map,
   MapPinned,
   PlusCircle,
-  Ruler,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -66,6 +65,57 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: 'Land records',
+    items: [
+      {
+        label: 'Land parcels',
+        to: '/land/parcels',
+        icon: MapPinned,
+        permissions: [PERMISSION.LAND_RECORD_READ],
+      },
+      {
+        label: 'Landowners',
+        to: '/land/landowners',
+        icon: Users,
+        permissions: [PERMISSION.LANDOWNER_READ],
+      },
+    ],
+  },
+  {
+    label: 'Land acquisition',
+    items: [
+      {
+        label: 'Acquisition cases',
+        to: '/acquisition',
+        icon: MapPinned,
+        permissions: [PERMISSION.ACQUISITION_READ],
+      },
+      {
+        label: 'My surveys',
+        to: '/acquisition/my-surveys',
+        icon: ClipboardCheck,
+        permissions: [PERMISSION.SURVEY_PERFORM],
+      },
+    ],
+  },
+  {
+    label: 'Compensation',
+    items: [
+      {
+        label: 'Rate cards and rule sets',
+        to: '/compensation/rules',
+        icon: IndianRupee,
+        permissions: [PERMISSION.VALUATION_READ],
+      },
+      {
+        label: 'R&R benefit catalogue',
+        to: '/compensation/rr/benefits',
+        icon: Users,
+        permissions: [PERMISSION.RR_CATALOGUE],
+      },
+    ],
+  },
+  {
     label: 'Administration',
     items: [
       {
@@ -103,21 +153,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Roadmap',
     items: [
-      { label: 'Land records', to: '/roadmap/land-records', icon: MapPinned, planned: true },
-      { label: 'Documents', to: '/roadmap/documents', icon: FileText, planned: true },
-      {
-        label: 'Land acquisition',
-        to: '/roadmap/acquisition',
-        icon: ClipboardCheck,
-        planned: true,
-      },
-      { label: 'Field surveys', to: '/roadmap/field-surveys', icon: Ruler, planned: true },
-      {
-        label: 'Valuation and compensation',
-        to: '/roadmap/valuation-compensation',
-        icon: IndianRupee,
-        planned: true,
-      },
       {
         label: 'Monitoring and MIS',
         to: '/roadmap/monitoring-mis',

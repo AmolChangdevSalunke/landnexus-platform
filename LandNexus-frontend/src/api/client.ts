@@ -163,9 +163,11 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20_000,
+  // Do not set a global Content-Type: axios adds application/json for object
+  // bodies, and FormData uploads must keep the browser-generated multipart
+  // boundary.
   headers: {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
   },
 })
 

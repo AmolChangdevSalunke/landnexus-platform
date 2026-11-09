@@ -19,3 +19,14 @@ Thumbs.db
 
 # Uploaded files (secure storage, added later)
 uploads/
+docs/*.backup*
+update-frontend-prompt.ps1
+*.log
+
+docs/*.backup*
+update-frontend-prompt.ps1
+*.log
+
+docs/*.backup*
+update-frontend-prompt.ps1
+*.log

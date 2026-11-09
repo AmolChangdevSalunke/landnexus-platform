@@ -13,6 +13,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { LinkButton } from '../../components/ui/LinkButton'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { Tabs } from '../../components/ui/Tabs'
 import { useApiQuery } from '../../hooks/useApiQuery'
 import { useReferenceNames } from '../../hooks/useReferenceNames'
 import {
@@ -21,6 +22,10 @@ import {
   formatLength,
   shortId,
 } from '../../utils/format'
+import { PERMISSION } from '../../utils/permissions'
+import { useAuth } from '../auth/useAuth'
+import { AlignmentPanel } from '../gis/AlignmentPanel'
+import { MapConflictsTab } from '../gis/MapConflictsTab'
 import { PROJECT_TYPE_LABELS } from '../proposals/labels'
 import { ProjectStatusBadge } from './ProjectStatusBadge'
 
@@ -41,8 +46,10 @@ function ProjectDetailsSkeleton() {
 
 export function ProjectDetailsPage() {
   const { id } = useParams<{ id: string }>()
+  const { can } = useAuth()
   const refs = useReferenceNames()
   const { ensureDistrictVillages } = refs
+  const [activeTab, setActiveTab] = useState('overview')
 
   const query = useApiQuery<ProjectResponse | null>(
     () => (id ? getProject(id) : Promise.resolve(null)),
@@ -225,118 +232,149 @@ export function ProjectDetailsPage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="p-5 xl:col-span-2">
-          <CardHeader
-            title="Project details"
-            description="Values stored by the backend. Nothing is calculated on this page."
-          />
+      <Tabs
+        label="Project sections"
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            id: 'overview',
+            label: 'Overview',
+            content: (
+              <div className="grid gap-4 xl:grid-cols-3">
+                <Card className="p-5 xl:col-span-2">
+                  <CardHeader
+                    title="Project details"
+                    description="Values stored by the backend. Nothing is calculated on this page."
+                  />
 
-          <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-            <DetailItem label="Project type">
-              {PROJECT_TYPE_LABELS[project.projectType]}
-            </DetailItem>
-            <DetailItem label="Department">
-              {refs.departmentName(project.departmentId) ?? shortId(project.departmentId)}
-            </DetailItem>
-            <DetailItem label="State">
-              {refs.stateName(project.stateId) ?? shortId(project.stateId)}
-            </DetailItem>
-            <DetailItem label="District">
-              {refs.districtName(project.districtId) ?? shortId(project.districtId)}
-            </DetailItem>
-            <DetailItem label="Taluka">
-              {project.talukaId
-                ? (refs.talukaName(project.talukaId) ?? shortId(project.talukaId))
-                : 'No specific taluka'}
-            </DetailItem>
-            <DetailItem label="Length">{formatLength(project.lengthKm)}</DetailItem>
-            <DetailItem label="Estimated land area">
-              {formatArea(project.estimatedLandAreaHa)}
-            </DetailItem>
-            <div className="sm:col-span-2">
-              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Affected villages ({project.villageIds.length})
-              </dt>
-              <dd className="mt-2">
-                {project.villageIds.length === 0 ? (
-                  <p className="text-sm text-slate-600">No villages recorded.</p>
-                ) : (
-                  <ul className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
-                    {project.villageIds.map((villageId) => (
-                      <li
-                        key={villageId}
-                        title={villageId}
-                        className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
-                      >
-                        {refs.villageName(villageId) ?? shortId(villageId)}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {villagesLoading ? (
-                  <p className="mt-2 text-xs text-slate-500">Loading village names…</p>
-                ) : null}
-                {!refs.enabled ? (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Village names are not available to this account, so identifiers are shown.
-                  </p>
-                ) : null}
-                {villagesError ? (
-                  <p role="alert" className="mt-2 text-xs font-medium text-danger-700">
-                    Village names could not be loaded. {villagesError}
-                  </p>
-                ) : null}
-              </dd>
-            </div>
-          </dl>
-        </Card>
+                  <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <DetailItem label="Project type">
+                      {PROJECT_TYPE_LABELS[project.projectType]}
+                    </DetailItem>
+                    <DetailItem label="Department">
+                      {refs.departmentName(project.departmentId) ?? shortId(project.departmentId)}
+                    </DetailItem>
+                    <DetailItem label="State">
+                      {refs.stateName(project.stateId) ?? shortId(project.stateId)}
+                    </DetailItem>
+                    <DetailItem label="District">
+                      {refs.districtName(project.districtId) ?? shortId(project.districtId)}
+                    </DetailItem>
+                    <DetailItem label="Taluka">
+                      {project.talukaId
+                        ? (refs.talukaName(project.talukaId) ?? shortId(project.talukaId))
+                        : 'No specific taluka'}
+                    </DetailItem>
+                    <DetailItem label="Length">{formatLength(project.lengthKm)}</DetailItem>
+                    <DetailItem label="Estimated land area">
+                      {formatArea(project.estimatedLandAreaHa)}
+                    </DetailItem>
+                    <div className="sm:col-span-2">
+                      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Affected villages ({project.villageIds.length})
+                      </dt>
+                      <dd className="mt-2">
+                        {project.villageIds.length === 0 ? (
+                          <p className="text-sm text-slate-600">No villages recorded.</p>
+                        ) : (
+                          <ul className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+                            {project.villageIds.map((villageId) => (
+                              <li
+                                key={villageId}
+                                title={villageId}
+                                className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                              >
+                                {refs.villageName(villageId) ?? shortId(villageId)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {villagesLoading ? (
+                          <p className="mt-2 text-xs text-slate-500">Loading village names…</p>
+                        ) : null}
+                        {!refs.enabled ? (
+                          <p className="mt-2 text-xs text-slate-500">
+                            Village names are not available to this account, so identifiers are
+                            shown.
+                          </p>
+                        ) : null}
+                        {villagesError ? (
+                          <p role="alert" className="mt-2 text-xs font-medium text-danger-700">
+                            Village names could not be loaded. {villagesError}
+                          </p>
+                        ) : null}
+                      </dd>
+                    </div>
+                  </dl>
+                </Card>
 
-        <Card className="p-4">
-          <CardHeader title="Linked records" description="Identifiers come from the backend." />
-          <dl className="mt-3 space-y-3 text-sm">
-            <div>
-              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Project id
-              </dt>
-              <dd className="mt-0.5 flex items-center gap-1 break-all font-mono text-xs text-slate-700">
-                {project.id}
-                <CopyButton value={project.id} label="project id" />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Originating proposal
-              </dt>
-              <dd className="mt-1">
-                <LinkButton
-                  to={`/proposals/${project.proposalId}`}
-                  variant="outline"
-                  size="sm"
-                >
-                  Open proposal
-                </LinkButton>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Proposal id
-              </dt>
-              <dd className="mt-0.5 break-all font-mono text-xs text-slate-700">
-                {project.proposalId}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Owner
-              </dt>
-              <dd className="mt-0.5 break-all font-mono text-xs text-slate-700">
-                {project.ownerUserId}
-              </dd>
-            </div>
-          </dl>
-        </Card>
-      </div>
+                <Card className="p-4">
+                  <CardHeader
+                    title="Linked records"
+                    description="Identifiers come from the backend."
+                  />
+                  <dl className="mt-3 space-y-3 text-sm">
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Project id
+                      </dt>
+                      <dd className="mt-0.5 flex items-center gap-1 break-all font-mono text-xs text-slate-700">
+                        {project.id}
+                        <CopyButton value={project.id} label="project id" />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Originating proposal
+                      </dt>
+                      <dd className="mt-1">
+                        <LinkButton
+                          to={`/proposals/${project.proposalId}`}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Open proposal
+                        </LinkButton>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Proposal id
+                      </dt>
+                      <dd className="mt-0.5 break-all font-mono text-xs text-slate-700">
+                        {project.proposalId}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Owner
+                      </dt>
+                      <dd className="mt-0.5 break-all font-mono text-xs text-slate-700">
+                        {project.ownerUserId}
+                      </dd>
+                    </div>
+                  </dl>
+                </Card>
+              </div>
+            ),
+          },
+          ...(can(PERMISSION.GIS_READ)
+            ? [
+                {
+                  id: 'map',
+                  label: 'Map and conflicts',
+                  content: <MapConflictsTab project={project} />,
+                },
+                {
+                  id: 'alignment',
+                  label: 'Alignment',
+                  content: <AlignmentPanel project={project} />,
+                },
+              ]
+            : []),
+        ]}
+      />
     </>
   )
 }

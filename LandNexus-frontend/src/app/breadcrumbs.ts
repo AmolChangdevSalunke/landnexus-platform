@@ -11,10 +11,6 @@ const MASTER_RESOURCE_LABELS: Record<string, string> = {
 }
 
 const ROADMAP_LABELS: Record<string, string> = {
-  'land-records': 'Land records',
-  documents: 'Documents',
-  acquisition: 'Land acquisition',
-  'field-surveys': 'Field surveys',
   'valuation-compensation': 'Valuation and compensation',
   gis: 'GIS map',
   'monitoring-mis': 'Monitoring and MIS',
@@ -88,6 +84,65 @@ export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
 
   if (adminLabels[pathname]) {
     return [{ label: 'Administration' }, { label: adminLabels[pathname] }]
+  }
+
+  if (pathname === '/land/parcels') {
+    return [{ label: 'Land parcels' }]
+  }
+
+  if (pathname === '/land/parcels/new') {
+    return [{ label: 'Land parcels', to: '/land/parcels' }, { label: 'New parcel' }]
+  }
+
+  if (pathname.startsWith('/land/parcels/')) {
+    const rest = pathname.slice('/land/parcels/'.length)
+    if (rest.endsWith('/edit')) {
+      const parcelId = rest.slice(0, -'/edit'.length)
+      return [
+        { label: 'Land parcels', to: '/land/parcels' },
+        { label: 'Parcel details', to: `/land/parcels/${parcelId}` },
+        { label: 'Edit parcel' },
+      ]
+    }
+    return [{ label: 'Land parcels', to: '/land/parcels' }, { label: 'Parcel details' }]
+  }
+
+  if (pathname === '/land/landowners') {
+    return [{ label: 'Landowners' }]
+  }
+
+  if (pathname === '/acquisition') {
+    return [{ label: 'Acquisition cases' }]
+  }
+
+  if (pathname === '/acquisition/new') {
+    return [
+      { label: 'Acquisition cases', to: '/acquisition' },
+      { label: 'New case' },
+    ]
+  }
+
+  if (pathname === '/acquisition/my-surveys') {
+    return [
+      { label: 'Acquisition cases', to: '/acquisition' },
+      { label: 'My surveys' },
+    ]
+  }
+
+  if (pathname.startsWith('/acquisition/')) {
+    const parts = pathname.split('/').filter(Boolean)
+    // /acquisition/:id/surveys/:caseParcelId/new
+    if (parts.length === 6 && parts[2] === 'surveys' && parts[5] === 'new') {
+      return [
+        { label: 'Acquisition cases', to: '/acquisition' },
+        { label: 'Case details', to: `/acquisition/${parts[1]}` },
+        { label: 'New survey' },
+      ]
+    }
+    return [
+      { label: 'Acquisition cases', to: '/acquisition' },
+      { label: 'Case details' },
+    ]
   }
 
   if (pathname.startsWith('/roadmap/')) {

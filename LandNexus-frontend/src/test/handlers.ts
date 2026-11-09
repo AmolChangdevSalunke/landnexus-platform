@@ -175,4 +175,95 @@ export const handlers = [
       totalPages: 0,
     }),
   ),
+
+  http.get(`${API_BASE_URL}/land-records/parcels`, () => HttpResponse.json(emptyPage(20))),
+
+  http.get(`${API_BASE_URL}/land-records/parcels/:id/ownerships`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/land-records/parcels/:id/mutations`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/land-records/parcels/:id/revenue-records`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/land-records/parcels/:id/documents`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/land-records/landowners`, () => HttpResponse.json(emptyPage(20))),
+
+  /* GIS defaults: no geometry recorded yet. Tests override these per case. */
+  http.get(`${API_BASE_URL}/gis/parcels/:id/boundary`, ({ request }) =>
+    HttpResponse.json(
+      {
+        timestamp: new Date().toISOString(),
+        status: 404,
+        error: 'Not Found',
+        message: 'No boundary has been recorded for this parcel.',
+        path: new URL(request.url).pathname,
+        fieldErrors: [],
+      },
+      { status: 404 },
+    ),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/parcels/:id/boundary/history`, () => HttpResponse.json([])),
+
+  http.get(`${API_BASE_URL}/gis/villages/:id/parcels`, () =>
+    HttpResponse.json({ type: 'FeatureCollection', features: [] }),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/projects/:id/alignment`, ({ request }) =>
+    HttpResponse.json(
+      {
+        timestamp: new Date().toISOString(),
+        status: 404,
+        error: 'Not Found',
+        message: 'No alignment has been recorded for this project.',
+        path: new URL(request.url).pathname,
+        fieldErrors: [],
+      },
+      { status: 404 },
+    ),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/projects/:id/corridor`, ({ request }) =>
+    HttpResponse.json(
+      {
+        timestamp: new Date().toISOString(),
+        status: 404,
+        error: 'Not Found',
+        message: 'No corridor exists until an alignment is recorded.',
+        path: new URL(request.url).pathname,
+        fieldErrors: [],
+      },
+      { status: 404 },
+    ),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/projects/:id/alignment/history`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/projects/:id/map`, () =>
+    HttpResponse.json({ type: 'FeatureCollection', features: [] }),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/projects/:id/conflicts`, ({ request }) =>
+    HttpResponse.json(
+      {
+        timestamp: new Date().toISOString(),
+        status: 404,
+        error: 'Not Found',
+        message: 'This project has no alignment yet.',
+        path: new URL(request.url).pathname,
+        fieldErrors: [],
+      },
+      { status: 404 },
+    ),
+  ),
 ]

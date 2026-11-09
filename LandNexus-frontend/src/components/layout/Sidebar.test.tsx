@@ -58,11 +58,43 @@ describe('Sidebar navigation permissions', () => {
     expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument()
   })
 
-  it('always keeps My work and marks roadmap modules as planned', () => {
+  it('shows land parcel link only with LAND_RECORD_READ', () => {
+    renderSidebar(['LAND_RECORD_READ'], ['LAND_RECORDS_OFFICER'])
+
+    expect(screen.getByRole('link', { name: 'Land parcels' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Landowners' })).not.toBeInTheDocument()
+  })
+
+  it('shows landowner link only with LANDOWNER_READ', () => {
+    renderSidebar(['LANDOWNER_READ'], ['REVENUE_OFFICER'])
+
+    expect(screen.getByRole('link', { name: 'Landowners' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Land parcels' })).not.toBeInTheDocument()
+  })
+
+  it('shows acquisition links based on acquisition and survey permissions', () => {
+    renderSidebar(['ACQUISITION_READ'], ['LAND_ACQUISITION_OFFICER'])
+
+    expect(screen.getByRole('link', { name: 'Acquisition cases' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'My surveys' })).not.toBeInTheDocument()
+  })
+
+  it('shows the survey worklist only with SURVEY_PERFORM', () => {
+    renderSidebar(['SURVEY_PERFORM'], ['FIELD_OFFICER'])
+
+    expect(screen.getByRole('link', { name: 'My surveys' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Acquisition cases' })).not.toBeInTheDocument()
+  })
+
+  it('always keeps My work and marks remaining roadmap modules as planned', () => {
     renderSidebar([])
 
     expect(screen.getByRole('link', { name: 'My work' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Land records/ })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /Valuation and compensation/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Monitoring and MIS/ })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Land records/ })).not.toBeInTheDocument()
     expect(screen.getAllByText('Planned').length).toBeGreaterThan(0)
   })
 })

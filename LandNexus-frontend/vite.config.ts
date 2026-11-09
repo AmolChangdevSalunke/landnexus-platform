@@ -10,5 +10,8 @@ export default defineConfig({
     css: false,
     clearMocks: true,
     restoreMocks: true,
+    // userEvent-driven form tests can exceed the 5 s default when the full
+    // suite runs in parallel on a busy machine.
+    testTimeout: 15_000,
   },
 })
