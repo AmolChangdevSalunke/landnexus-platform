@@ -17,7 +17,10 @@ import { GisMapPage } from '../features/gis/GisMapPage'
 import { CaseDetailsPage } from '../features/acquisition/CaseDetailsPage'
 import { CaseFormPage } from '../features/acquisition/CaseFormPage'
 import { CaseListPage } from '../features/acquisition/CaseListPage'
+import { AwardPrintPage } from '../features/acquisition/AwardPrintPage'
 import { MySurveysPage } from '../features/acquisition/MySurveysPage'
+import { NoticePrintPage } from '../features/acquisition/NoticePrintPage'
+import { NoticesRegisterPage } from '../features/acquisition/NoticesRegisterPage'
 import { SurveyFormPage } from '../features/acquisition/SurveyFormPage'
 import { BenefitCataloguePage } from '../features/compensation/BenefitCataloguePage'
 import { RateRulesPage } from '../features/compensation/RateRulesPage'
@@ -199,10 +202,37 @@ export function AppRoutes() {
           />
 
           <Route
+            path="acquisition/notices"
+            element={
+              <RequirePermission any={[PERMISSION.ACQUISITION_READ]}>
+                <NoticesRegisterPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition/notices/:caseId/:noticeId"
+            element={
+              <RequirePermission any={[PERMISSION.ACQUISITION_READ]}>
+                <NoticePrintPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
             path="acquisition/:id/surveys/:caseParcelId/new"
             element={
               <RequirePermission any={[PERMISSION.SURVEY_PERFORM]}>
                 <SurveyFormPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="acquisition/:id/award/print"
+            element={
+              <RequirePermission any={[PERMISSION.ACQUISITION_READ]}>
+                <AwardPrintPage />
               </RequirePermission>
             }
           />

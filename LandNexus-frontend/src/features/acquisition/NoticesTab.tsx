@@ -9,12 +9,13 @@ import type {
   NoticeType,
 } from '../../api/types'
 import { Alert } from '../../components/ui/Alert'
-import { Badge, type BadgeVariant } from '../../components/ui/Badge'
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { Input } from '../../components/ui/Input'
+import { LinkButton } from '../../components/ui/LinkButton'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -25,15 +26,11 @@ import { formatDate } from '../../utils/format'
 import { PERMISSION } from '../../utils/permissions'
 import { useAuth } from '../auth/useAuth'
 import { isFutureDate, todayIso } from './dates'
-import { NOTICE_TYPE_LABELS, recordableNoticeTypes } from './labels'
-
-const NOTICE_VARIANTS: Record<NoticeType, BadgeVariant> = {
-  PRELIMINARY_NOTIFICATION: 'info',
-  FINAL_DECLARATION: 'indigo',
-  AWARD_NOTICE: 'success',
-  POSSESSION_NOTICE: 'teal',
-  OTHER: 'neutral',
-}
+import {
+  NOTICE_TYPE_LABELS,
+  NOTICE_TYPE_VARIANTS,
+  recordableNoticeTypes,
+} from './labels'
 
 export function NoticesTab({
   acquisitionCase,
@@ -122,7 +119,7 @@ export function NoticesTab({
                     <h3 className="text-base font-semibold text-navy-900">
                       {NOTICE_TYPE_LABELS[notice.noticeType]}
                     </h3>
-                    <Badge variant={NOTICE_VARIANTS[notice.noticeType]}>
+                    <Badge variant={NOTICE_TYPE_VARIANTS[notice.noticeType]}>
                       Recorded
                     </Badge>
                   </div>
@@ -140,6 +137,13 @@ export function NoticesTab({
                     <p className="mt-2 text-sm text-slate-700">{notice.description}</p>
                   ) : null}
                 </div>
+                <LinkButton
+                  to={`/acquisition/notices/${acquisitionCase.id}/${notice.id}`}
+                  variant="ghost"
+                  size="sm"
+                >
+                  Print letter
+                </LinkButton>
               </div>
             </Card>
           ))}

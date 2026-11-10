@@ -235,6 +235,81 @@ export const handlers = [
 
   http.get(`${API_BASE_URL}/land-records/landowners`, () => HttpResponse.json(emptyPage(20))),
 
+  /* Acquisition defaults: no cases yet. Tests override these per case. */
+  http.get(`${API_BASE_URL}/acquisition/cases`, () => HttpResponse.json(emptyPage(20))),
+
+  http.get(`${API_BASE_URL}/acquisition/my-assignments`, () => HttpResponse.json([])),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/parcels`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/surveys`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/history`, () =>
+    HttpResponse.json([]),
+  ),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/verification-report`, ({ request }) =>
+    HttpResponse.json(
+      {
+        timestamp: new Date().toISOString(),
+        status: 404,
+        error: 'Not Found',
+        message: 'No verification report exists for this case yet.',
+        path: new URL(request.url).pathname,
+        fieldErrors: [],
+      },
+      { status: 404 },
+    ),
+  ),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/notices`, () => HttpResponse.json([])),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/objections`, () =>
+    HttpResponse.json([]),
+  ),
+
+  /* The award endpoint returns 404 until an award is declared. */
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/award`, ({ request }) =>
+    HttpResponse.json(
+      {
+        timestamp: new Date().toISOString(),
+        status: 404,
+        error: 'Not Found',
+        message: 'No award declared for this case',
+        path: new URL(request.url).pathname,
+        fieldErrors: [],
+      },
+      { status: 404 },
+    ),
+  ),
+
+  http.get(`${API_BASE_URL}/acquisition/cases/:id/possessions`, () =>
+    HttpResponse.json([]),
+  ),
+
+  /* Minimal case-by-id default; feature tests override it with their fixtures. */
+  http.get(`${API_BASE_URL}/acquisition/cases/:id`, ({ params }) =>
+    HttpResponse.json({
+      id: params.id,
+      caseNumber: 'ACQ-2026-000000',
+      projectId: '99999999-9999-4999-8999-999999999999',
+      stateId: '11111111-1111-4111-8111-111111111111',
+      districtId: '22222222-2222-4222-8222-222222222222',
+      framework: 'LARR_2013',
+      frameworkNote: null,
+      description: null,
+      status: 'INITIATED',
+      villageIds: [],
+      createdAt: '2026-02-01T10:00:00Z',
+      updatedAt: '2026-02-01T10:00:00Z',
+      availableActions: [],
+    }),
+  ),
+
   /* GIS defaults: no geometry recorded yet. Tests override these per case. */
   http.get(`${API_BASE_URL}/gis/parcels/:id/boundary`, ({ request }) =>
     HttpResponse.json(

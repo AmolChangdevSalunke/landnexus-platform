@@ -14,6 +14,7 @@ import {
   Map,
   MapPinned,
   PlusCircle,
+  ScrollText,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -102,6 +103,12 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/acquisition/my-surveys',
         icon: ClipboardCheck,
         permissions: [PERMISSION.SURVEY_PERFORM],
+      },
+      {
+        label: 'Notices register',
+        to: '/acquisition/notices',
+        icon: ScrollText,
+        permissions: [PERMISSION.ACQUISITION_READ],
       },
     ],
   },

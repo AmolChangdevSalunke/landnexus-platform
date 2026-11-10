@@ -162,9 +162,18 @@ export function CaseListPage() {
       className: 'text-right',
       headerClassName: 'text-right',
       render: (acquisitionCase) => (
-        <LinkButton to={`/acquisition/${acquisitionCase.id}`} variant="outline" size="sm">
-          View
-        </LinkButton>
+        <div className="flex flex-wrap justify-end gap-2">
+          <LinkButton
+            to={`/acquisition/notices?caseId=${acquisitionCase.id}`}
+            variant="ghost"
+            size="sm"
+          >
+            Notices
+          </LinkButton>
+          <LinkButton to={`/acquisition/${acquisitionCase.id}`} variant="outline" size="sm">
+            View
+          </LinkButton>
+        </div>
       ),
     },
   ]
@@ -315,7 +324,8 @@ export function CaseListPage() {
       {query.data && query.data.totalElements > 0 ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
           <Badge variant="neutral">Read only list</Badge>
-          Workflow actions and record entry are on the case details page.
+          Workflow actions and record entry are on the case details page; the legal
+          notice register opens per case.
         </p>
       ) : null}
     </>

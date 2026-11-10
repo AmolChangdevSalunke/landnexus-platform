@@ -18,6 +18,7 @@ import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { Input } from '../../components/ui/Input'
+import { LinkButton } from '../../components/ui/LinkButton'
 import { Modal } from '../../components/ui/Modal'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Textarea } from '../../components/ui/Textarea'
@@ -200,6 +201,16 @@ export function AwardTab({
               </p>
             </div>
           </Card>
+
+          <div className="flex justify-end">
+            <LinkButton
+              to={`/acquisition/${acquisitionCase.id}/award/print`}
+              variant="outline"
+              size="sm"
+            >
+              Print award letter
+            </LinkButton>
+          </div>
 
           <DataTable
             columns={columns}

@@ -86,6 +86,14 @@ export const NOTICE_TYPE_LABELS: Record<NoticeType, string> = {
   OTHER: 'Other notice',
 }
 
+export const NOTICE_TYPE_VARIANTS: Record<NoticeType, BadgeVariant> = {
+  PRELIMINARY_NOTIFICATION: 'info',
+  FINAL_DECLARATION: 'indigo',
+  AWARD_NOTICE: 'success',
+  POSSESSION_NOTICE: 'teal',
+  OTHER: 'neutral',
+}
+
 /**
  * Notice types the backend accepts in the current stage. This only shapes the
  * form; the backend still rejects a type that is not allowed.
