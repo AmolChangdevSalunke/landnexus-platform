@@ -55,6 +55,34 @@ export function geometryPositions(geometry: Geometry): number[][] {
   return positions
 }
 
+export interface Bounds {
+  minLon: number
+  minLat: number
+  maxLon: number
+  maxLat: number
+}
+
+/** Axis-aligned WGS84 bounding box of every position in the geometry. */
+export function geometryBounds(geometry: Geometry): Bounds | null {
+  const positions = geometryPositions(geometry)
+  if (positions.length === 0) {
+    return null
+  }
+
+  let minLon = Infinity
+  let maxLon = -Infinity
+  let minLat = Infinity
+  let maxLat = -Infinity
+  positions.forEach(([lon, lat]) => {
+    minLon = Math.min(minLon, lon)
+    maxLon = Math.max(maxLon, lon)
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+  })
+
+  return { minLon, minLat, maxLon, maxLat }
+}
+
 /**
  * Equirectangular projection with a latitude correction.
  *

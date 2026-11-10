@@ -14,6 +14,8 @@ import { ProposalFormPage } from '../features/proposals/ProposalFormPage'
 import { ProposalListPage } from '../features/proposals/ProposalListPage'
 import { NotFoundPage } from '../features/shared/NotFoundPage'
 import { GisMapPage } from '../features/gis/GisMapPage'
+import { ConflictWorkspacePage } from '../features/gis/ConflictWorkspacePage'
+import { VillageParcelsPage } from '../features/gis/VillageParcelsPage'
 import { CaseDetailsPage } from '../features/acquisition/CaseDetailsPage'
 import { CaseFormPage } from '../features/acquisition/CaseFormPage'
 import { CaseListPage } from '../features/acquisition/CaseListPage'
@@ -110,6 +112,24 @@ export function AppRoutes() {
             element={
               <RequirePermission any={[PERMISSION.MASTER_DATA_READ]}>
                 <GisMapPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="gis/conflicts"
+            element={
+              <RequirePermission any={[PERMISSION.GIS_READ]}>
+                <ConflictWorkspacePage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="gis/villages"
+            element={
+              <RequirePermission any={[PERMISSION.GIS_READ]}>
+                <VillageParcelsPage />
               </RequirePermission>
             }
           />

@@ -20,6 +20,7 @@ import { normalizeMapName } from '../myWork/mapNames'
 import { useScopeDistricts } from '../myWork/useScopeDistricts'
 import { PROJECT_TYPE_LABELS } from '../proposals/labels'
 import { ProjectStatusBadge } from '../projects/ProjectStatusBadge'
+import { ImageryStatusCard } from './ImageryStatusCard'
 
 const ScopeMap = lazy(() =>
   import('../myWork/ScopeMap').then((module) => ({ default: module.ScopeMap })),
@@ -215,74 +216,78 @@ export function GisMapPage() {
           </p>
         </Card>
 
-        <Card className="flex h-fit flex-col p-4">
-          <CardHeader
-            title="Filter projects"
-            description="Filters are applied by the backend before pagination."
-          />
+        <div className="flex flex-col gap-4">
+          <Card className="flex h-fit flex-col p-4">
+            <CardHeader
+              title="Filter projects"
+              description="Filters are applied by the backend before pagination."
+            />
 
-          <div className="mt-4 space-y-4">
-            <Select
-              label="District"
-              value={districtId}
-              onChange={(event) => changeDistrict(event.target.value)}
-              disabled={districtFilterDisabled}
-              hint={
-                districtFilterDisabled
-                  ? 'District options are not available right now.'
-                  : scope.isNationwide
-                    ? 'All districts from master data.'
-                    : 'Only districts in your scope are listed.'
-              }
-            >
-              <option value={FILTER_ALL}>All districts</option>
-              {districtOptions
-                .filter((district) => district.status === 'ACTIVE' || district.id === districtId)
-                .map((district) => (
-                  <option key={district.id} value={district.id}>
-                    {district.name}
-                  </option>
-                ))}
-            </Select>
+            <div className="mt-4 space-y-4">
+              <Select
+                label="District"
+                value={districtId}
+                onChange={(event) => changeDistrict(event.target.value)}
+                disabled={districtFilterDisabled}
+                hint={
+                  districtFilterDisabled
+                    ? 'District options are not available right now.'
+                    : scope.isNationwide
+                      ? 'All districts from master data.'
+                      : 'Only districts in your scope are listed.'
+                }
+              >
+                <option value={FILTER_ALL}>All districts</option>
+                {districtOptions
+                  .filter((district) => district.status === 'ACTIVE' || district.id === districtId)
+                  .map((district) => (
+                    <option key={district.id} value={district.id}>
+                      {district.name}
+                    </option>
+                  ))}
+              </Select>
 
-            <div className="flex flex-wrap gap-2">
-              {hasFilters ? (
-                <Button
-                  variant="outline"
-                  onClick={clearFilters}
-                  leftIcon={<RotateCcw aria-hidden="true" className="h-4 w-4" />}
-                >
-                  Clear filter
-                </Button>
-              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {hasFilters ? (
+                  <Button
+                    variant="outline"
+                    onClick={clearFilters}
+                    leftIcon={<RotateCcw aria-hidden="true" className="h-4 w-4" />}
+                  >
+                    Clear filter
+                  </Button>
+                ) : null}
+              </div>
+
+              <dl className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                    Visible projects
+                  </dt>
+                  <dd className="mt-1 text-2xl font-bold text-navy-900">
+                    {query.isLoading ? '…' : (query.data?.totalElements ?? '—')}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                    Scope
+                  </dt>
+                  <dd className="mt-1 text-sm font-semibold text-navy-900">
+                    {scope.isNationwide
+                      ? 'Nation-wide'
+                      : scope.isLoading
+                        ? '…'
+                        : scope.error
+                          ? 'Unavailable'
+                          : `${scope.districts.length} ${scope.districts.length === 1 ? 'district' : 'districts'}`}
+                  </dd>
+                </div>
+              </dl>
             </div>
+          </Card>
 
-            <dl className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
-              <div>
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                  Visible projects
-                </dt>
-                <dd className="mt-1 text-2xl font-bold text-navy-900">
-                  {query.isLoading ? '…' : (query.data?.totalElements ?? '—')}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                  Scope
-                </dt>
-                <dd className="mt-1 text-sm font-semibold text-navy-900">
-                  {scope.isNationwide
-                    ? 'Nation-wide'
-                    : scope.isLoading
-                      ? '…'
-                      : scope.error
-                        ? 'Unavailable'
-                        : `${scope.districts.length} ${scope.districts.length === 1 ? 'district' : 'districts'}`}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </Card>
+          <ImageryStatusCard />
+        </div>
       </div>
 
       <div className="mt-4">

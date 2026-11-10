@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  AlertTriangle,
   BarChart3,
   Bell,
   ClipboardCheck,
@@ -62,6 +63,18 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/gis',
         icon: Map,
         permissions: [PERMISSION.MASTER_DATA_READ],
+      },
+      {
+        label: 'Conflict workspace',
+        to: '/gis/conflicts',
+        icon: AlertTriangle,
+        permissions: [PERMISSION.GIS_READ],
+      },
+      {
+        label: 'Village parcels',
+        to: '/gis/villages',
+        icon: MapPinned,
+        permissions: [PERMISSION.GIS_READ],
       },
       { label: 'Notifications', to: '/notifications', icon: Bell },
     ],

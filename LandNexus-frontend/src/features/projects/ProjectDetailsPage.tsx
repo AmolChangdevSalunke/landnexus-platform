@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, FileText } from 'lucide-react'
 import { toApiErrorInfo } from '../../api/errors'
 import { getProject } from '../../api/projects'
 import type { ProjectResponse } from '../../api/types'
@@ -364,7 +364,26 @@ export function ProjectDetailsPage() {
                 {
                   id: 'map',
                   label: 'Map and conflicts',
-                  content: <MapConflictsTab project={project} />,
+                  content: (
+                    <div className="space-y-4">
+                      <div className="flex justify-end">
+                        <LinkButton
+                          to={`/gis/conflicts?project=${project.id}`}
+                          variant="outline"
+                          size="sm"
+                          leftIcon={
+                            <AlertTriangle
+                              aria-hidden="true"
+                              className="h-3.5 w-3.5"
+                            />
+                          }
+                        >
+                          Open conflict workspace
+                        </LinkButton>
+                      </div>
+                      <MapConflictsTab project={project} />
+                    </div>
+                  ),
                 },
                 {
                   id: 'alignment',

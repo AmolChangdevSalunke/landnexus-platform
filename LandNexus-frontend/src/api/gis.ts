@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiClient } from './client'
 import type {
   AlignmentFeatureProps,
@@ -11,6 +12,8 @@ import type {
   Feature,
   FeatureCollection,
   Geometry,
+  ImageryStatus,
+  ImageryTestResult,
   MapProps,
 } from './types'
 
@@ -133,4 +136,69 @@ export async function getProjectConflicts(
     `/gis/projects/${projectId}/conflicts`,
   )
   return data
+}
+
+/* ------------------------------------------------------------------ */
+/* Satellite imagery (server-proxied WMS pictures)                     */
+/* ------------------------------------------------------------------ */
+
+/** GET /gis/imagery/status — a summary only; the provider URL never reaches the browser. */
+export async function getImageryStatus(): Promise<ImageryStatus> {
+  const { data } = await apiClient.get<ImageryStatus>('/gis/imagery/status')
+  return data
+}
+
+export interface ImageryMapParams {
+  minLon: number
+  minLat: number
+  maxLon: number
+  maxLat: number
+  /** 64 to 1024; the server clamps to this range. */
+  width?: number
+  height?: number
+  layer?: 'imagery' | 'overlay'
+}
+
+/**
+ * GET /gis/imagery/map — one satellite picture for a bounding box inside India
+ * (at most 5 degrees on a side), fetched as a blob because the request needs
+ * the Authorization header. Error bodies are small JSON objects; axios would
+ * hand them over as blobs, so they are unpacked before toApiErrorInfo runs.
+ */
+export async function getImageryMap(params: ImageryMapParams): Promise<Blob> {
+  const { minLon, minLat, maxLon, maxLat, width, height, layer } = params
+  try {
+    const { data } = await apiClient.get<Blob>('/gis/imagery/map', {
+      params: {
+        bbox: `${minLon},${minLat},${maxLon},${maxLat}`,
+        width,
+        height,
+        layer,
+      },
+      responseType: 'blob',
+    })
+    return data
+  } catch (caught) {
+    throw await unwrapBlobErrorBody(caught)
+  }
+}
+
+/** POST /gis/imagery/test — asks the provider for a tiny picture and reports the outcome. */
+export async function testImagery(): Promise<ImageryTestResult> {
+  const { data } = await apiClient.post<ImageryTestResult>('/gis/imagery/test')
+  return data
+}
+
+async function unwrapBlobErrorBody(caught: unknown): Promise<unknown> {
+  if (axios.isAxiosError(caught) && caught.response) {
+    const body: unknown = caught.response.data
+    if (body instanceof Blob && body.type.includes('json')) {
+      try {
+        caught.response.data = JSON.parse(await body.text())
+      } catch {
+        // Keep the original error; toApiErrorInfo falls back to its own message.
+      }
+    }
+  }
+  return caught
 }

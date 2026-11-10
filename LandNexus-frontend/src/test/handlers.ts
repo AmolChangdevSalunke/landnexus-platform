@@ -395,6 +395,37 @@ export const handlers = [
     HttpResponse.json({ type: 'FeatureCollection', features: [] }),
   ),
 
+  /* Imagery defaults: disabled unless a test overrides these. */
+  http.get(`${API_BASE_URL}/gis/imagery/status`, () =>
+    HttpResponse.json({
+      enabled: false,
+      provider: 'ISRO Bhuvan',
+      kind: 'WMS',
+      overlayAvailable: false,
+      attribution: '',
+      message:
+        'Satellite imagery is not enabled. Get access from the provider (for example ISRO Bhuvan), then follow docs/IMAGERY_SETUP.md.',
+    }),
+  ),
+
+  http.get(`${API_BASE_URL}/gis/imagery/map`, () =>
+    HttpResponse.json(
+      { status: 503, message: 'Satellite imagery is not enabled on this server' },
+      { status: 503 },
+    ),
+  ),
+
+  http.post(`${API_BASE_URL}/gis/imagery/test`, () =>
+    HttpResponse.json({
+      ok: false,
+      httpStatus: null,
+      contentType: null,
+      bytes: 0,
+      elapsedMs: 0,
+      message: 'Satellite imagery is not enabled on this server',
+    }),
+  ),
+
   http.get(`${API_BASE_URL}/gis/projects/:id/alignment`, ({ request }) =>
     HttpResponse.json(
       {

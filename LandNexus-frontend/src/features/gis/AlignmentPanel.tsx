@@ -30,6 +30,7 @@ import { PERMISSION } from '../../utils/permissions'
 import { useAuth } from '../auth/useAuth'
 import { GeoJsonSvg } from './GeoJsonSvg'
 import { GeometryEntryForm } from './GeometryEntryForm'
+import { SatellitePreview } from './SatellitePreview'
 
 export function AlignmentPanel({ project }: { project: ProjectResponse }) {
   const { can } = useAuth()
@@ -224,6 +225,13 @@ export function AlignmentPanel({ project }: { project: ProjectResponse }) {
               />
             </div>
           </Card>
+
+          <SatellitePreview
+            geometry={
+              corridorQuery.data?.geometry ?? alignmentQuery.data?.geometry ?? null
+            }
+            label={`Satellite picture of the alignment and corridor of project ${project.code}`}
+          />
         </>
       )}
 

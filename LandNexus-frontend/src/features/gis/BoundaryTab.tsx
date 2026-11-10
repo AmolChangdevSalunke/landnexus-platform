@@ -27,6 +27,7 @@ import { PERMISSION } from '../../utils/permissions'
 import { useAuth } from '../auth/useAuth'
 import { GeoJsonSvg } from './GeoJsonSvg'
 import { GeometryEntryForm } from './GeometryEntryForm'
+import { SatellitePreview } from './SatellitePreview'
 
 function variancePercent(drawn: number, recorded: number): number | null {
   if (!Number.isFinite(drawn) || !Number.isFinite(recorded) || recorded <= 0) {
@@ -207,6 +208,11 @@ export function BoundaryTab({ parcel }: { parcel: ParcelResponse }) {
               </div>
             </Card>
           ) : null}
+
+          <SatellitePreview
+            geometry={boundaryQuery.data?.geometry}
+            label={`Satellite picture of the recorded boundary of parcel ${parcel.id}`}
+          />
         </>
       )}
 

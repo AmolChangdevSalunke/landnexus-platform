@@ -1228,6 +1228,29 @@ export interface ConflictReport {
   limitations: string[]
 }
 
+/* Satellite imagery served through the backend. The browser never sees
+ * the provider URL or its secret; only these summaries cross the wire. */
+
+/** GET /gis/imagery/status */
+export interface ImageryStatus {
+  enabled: boolean
+  provider: string | null
+  kind: string | null
+  overlayAvailable: boolean
+  attribution: string
+  message: string | null
+}
+
+/** POST /gis/imagery/test */
+export interface ImageryTestResult {
+  ok: boolean
+  httpStatus: number | null
+  contentType: string | null
+  bytes: number
+  elapsedMs: number
+  message: string | null
+}
+
 /* ------------------------------------------------------------------ */
 /* Dashboards, MIS reports, SLA and settings (Module 7)                */
 /* ------------------------------------------------------------------ */
