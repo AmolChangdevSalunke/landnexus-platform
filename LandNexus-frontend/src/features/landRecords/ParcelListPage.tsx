@@ -31,6 +31,7 @@ export function ParcelListPage() {
   const { can } = useAuth()
   const refs = useReferenceNames()
   const canWrite = can(PERMISSION.LAND_RECORD_WRITE)
+  const canReadDocuments = can(PERMISSION.DOCUMENT_READ)
 
   const [districtId, setDistrictId] = useState(FILTER_ALL)
   const [villageId, setVillageId] = useState(FILTER_ALL)
@@ -194,9 +195,20 @@ export function ParcelListPage() {
       className: 'text-right',
       headerClassName: 'text-right',
       render: (parcel) => (
-        <LinkButton to={`/land/parcels/${parcel.id}`} variant="outline" size="sm">
-          View
-        </LinkButton>
+        <div className="flex flex-wrap justify-end gap-2">
+          {canReadDocuments ? (
+            <LinkButton
+              to={`/land/documents?parcelId=${parcel.id}`}
+              variant="ghost"
+              size="sm"
+            >
+              Documents
+            </LinkButton>
+          ) : null}
+          <LinkButton to={`/land/parcels/${parcel.id}`} variant="outline" size="sm">
+            View
+          </LinkButton>
+        </div>
       ),
     },
   ]
@@ -342,8 +354,8 @@ export function ParcelListPage() {
       {query.data && query.data.totalElements > 0 ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
           <Badge variant="neutral">Read only list</Badge>
-          Last updated {formatDate(rows[0]?.updatedAt)} · ownership and documents are on the
-          parcel details page.
+          Last updated {formatDate(rows[0]?.updatedAt)} · ownership is on the parcel details
+          page; documents open in the document register.
         </p>
       ) : null}
     </>

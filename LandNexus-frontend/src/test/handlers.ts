@@ -178,6 +178,45 @@ export const handlers = [
 
   http.get(`${API_BASE_URL}/land-records/parcels`, () => HttpResponse.json(emptyPage(20))),
 
+  /* Minimal parcel-by-id default; feature tests override it with their fixtures. */
+  http.get(`${API_BASE_URL}/land-records/parcels/:id`, ({ params }) =>
+    HttpResponse.json({
+      id: params.id,
+      stateId: '11111111-1111-1111-1111-111111111111',
+      districtId: '22222222-2222-2222-2222-222222222222',
+      talukaId: '33333333-3333-3333-3333-333333333333',
+      villageId: '44444444-4444-4444-4444-444444444444',
+      gatNumber: '123',
+      surveyNumber: '45/2',
+      subdivisionNumber: null,
+      areaHa: 1.25,
+      classification: 'AGRICULTURAL_IRRIGATED',
+      landUse: 'CULTIVATION',
+      status: 'ACTIVE',
+      createdAt: '2026-02-01T10:00:00Z',
+      updatedAt: '2026-02-01T10:00:00Z',
+    }),
+  ),
+
+  /* Minimal document-by-id default; feature tests override it with their fixtures. */
+  http.get(`${API_BASE_URL}/land-records/documents/:id`, ({ params }) =>
+    HttpResponse.json({
+      id: params.id,
+      parcelId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      category: 'SEVEN_TWELVE_EXTRACT',
+      title: '7/12 extract 2025',
+      currentVersionNo: 1,
+      verificationStatus: 'PENDING',
+      verifiedVersionNo: null,
+      verifiedByUserId: null,
+      verifiedAt: null,
+      verificationRemarks: null,
+      createdAt: '2026-02-02T09:00:00Z',
+      updatedAt: '2026-02-02T09:00:00Z',
+      versions: [],
+    }),
+  ),
+
   http.get(`${API_BASE_URL}/land-records/parcels/:id/ownerships`, () =>
     HttpResponse.json([]),
   ),

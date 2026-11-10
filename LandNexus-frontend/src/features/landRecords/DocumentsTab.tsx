@@ -524,7 +524,7 @@ function UploadDocumentDialog({
   )
 }
 
-function UploadVersionDialog({
+export function UploadVersionDialog({
   document,
   onClose,
   onSaved,
@@ -609,7 +609,7 @@ function UploadVersionDialog({
   )
 }
 
-function DocumentDecisionDialog({
+export function DocumentDecisionDialog({
   document,
   outcome,
   onClose,

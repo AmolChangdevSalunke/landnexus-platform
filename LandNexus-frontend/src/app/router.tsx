@@ -22,6 +22,8 @@ import { SurveyFormPage } from '../features/acquisition/SurveyFormPage'
 import { BenefitCataloguePage } from '../features/compensation/BenefitCataloguePage'
 import { RateRulesPage } from '../features/compensation/RateRulesPage'
 import { LandownerListPage } from '../features/landRecords/LandownerListPage'
+import { DocumentDetailsPage } from '../features/landRecords/DocumentDetailsPage'
+import { DocumentRegisterPage } from '../features/landRecords/DocumentRegisterPage'
 import { ParcelDetailsPage } from '../features/landRecords/ParcelDetailsPage'
 import { ParcelFormPage } from '../features/landRecords/ParcelFormPage'
 import { ParcelListPage } from '../features/landRecords/ParcelListPage'
@@ -147,6 +149,24 @@ export function AppRoutes() {
             element={
               <RequirePermission any={[PERMISSION.LANDOWNER_READ]}>
                 <LandownerListPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="land/documents"
+            element={
+              <RequirePermission any={[PERMISSION.LAND_RECORD_READ]}>
+                <DocumentRegisterPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="land/documents/:id"
+            element={
+              <RequirePermission any={[PERMISSION.DOCUMENT_READ]}>
+                <DocumentDetailsPage />
               </RequirePermission>
             }
           />
