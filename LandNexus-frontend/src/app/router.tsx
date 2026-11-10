@@ -24,6 +24,9 @@ import { NoticesRegisterPage } from '../features/acquisition/NoticesRegisterPage
 import { SurveyFormPage } from '../features/acquisition/SurveyFormPage'
 import { BenefitCataloguePage } from '../features/compensation/BenefitCataloguePage'
 import { RateRulesPage } from '../features/compensation/RateRulesPage'
+import { RrCaseDetailPage } from '../features/compensation/RrCaseDetailPage'
+import { RuleSetDetailPage } from '../features/compensation/RuleSetDetailPage'
+import { ValuationDetailPage } from '../features/compensation/ValuationDetailPage'
 import { LandownerListPage } from '../features/landRecords/LandownerListPage'
 import { DocumentDetailsPage } from '../features/landRecords/DocumentDetailsPage'
 import { DocumentRegisterPage } from '../features/landRecords/DocumentRegisterPage'
@@ -260,6 +263,33 @@ export function AppRoutes() {
             element={
               <RequirePermission any={[PERMISSION.RR_CATALOGUE]}>
                 <BenefitCataloguePage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="compensation/valuations/:id"
+            element={
+              <RequirePermission any={[PERMISSION.VALUATION_READ]}>
+                <ValuationDetailPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="compensation/rr-cases/:id"
+            element={
+              <RequirePermission any={[PERMISSION.RR_READ]}>
+                <RrCaseDetailPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="compensation/rule-sets/:id"
+            element={
+              <RequirePermission any={[PERMISSION.VALUATION_READ]}>
+                <RuleSetDetailPage />
               </RequirePermission>
             }
           />

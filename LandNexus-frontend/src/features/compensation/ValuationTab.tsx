@@ -32,6 +32,7 @@ import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { Input } from '../../components/ui/Input'
+import { LinkButton } from '../../components/ui/LinkButton'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -146,6 +147,9 @@ export function ValuationTab({
                     <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Amount
                     </th>
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Record
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -162,6 +166,19 @@ export function ValuationTab({
                       </td>
                       <td className="px-3 py-2 text-right text-slate-700">
                         {formatMoney(row.totalAmount)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {row.valuationId ? (
+                          <LinkButton
+                            to={`/compensation/valuations/${row.valuationId}`}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            View
+                          </LinkButton>
+                        ) : (
+                          <span className="text-xs text-slate-500">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -466,9 +483,18 @@ function ParcelValuationCard({
                     v{valuation.versionNo} · {formatMoney(valuation.totalAmount)} ·{' '}
                     {formatDate(valuation.referenceDate)}
                   </p>
-                  <Badge variant={VALUATION_STATUS_VARIANTS[valuation.status]}>
-                    {VALUATION_STATUS_LABELS[valuation.status]}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={VALUATION_STATUS_VARIANTS[valuation.status]}>
+                      {VALUATION_STATUS_LABELS[valuation.status]}
+                    </Badge>
+                    <LinkButton
+                      to={`/compensation/valuations/${valuation.id}`}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      View
+                    </LinkButton>
+                  </div>
                 </div>
                 {valuation.decisionRemarks ? (
                   <p className="mt-1 text-xs text-slate-500">{valuation.decisionRemarks}</p>
@@ -567,27 +593,32 @@ function ValuationCard({
           </p>
         </div>
 
-        {actions.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {actions.map((action) => (
-              <Button
-                key={action}
-                size="sm"
-                variant={action === 'REJECT' ? 'outline' : action === 'APPROVE' ? 'primary' : 'outline'}
-                isLoading={action === 'SUBMIT' && isSubmitting}
-                onClick={() => onAction(action)}
-              >
-                {action === 'SUBMIT'
-                  ? 'Submit for approval'
-                  : action === 'RECALCULATE'
-                    ? 'Recalculate'
-                    : action === 'APPROVE'
-                      ? 'Approve'
-                      : 'Reject'}
-              </Button>
-            ))}
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <LinkButton
+            to={`/compensation/valuations/${valuation.id}`}
+            variant="ghost"
+            size="sm"
+          >
+            Open full record
+          </LinkButton>
+          {actions.map((action) => (
+            <Button
+              key={action}
+              size="sm"
+              variant={action === 'REJECT' ? 'outline' : action === 'APPROVE' ? 'primary' : 'outline'}
+              isLoading={action === 'SUBMIT' && isSubmitting}
+              onClick={() => onAction(action)}
+            >
+              {action === 'SUBMIT'
+                ? 'Submit for approval'
+                : action === 'RECALCULATE'
+                  ? 'Recalculate'
+                  : action === 'APPROVE'
+                    ? 'Approve'
+                    : 'Reject'}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-x-auto p-4">

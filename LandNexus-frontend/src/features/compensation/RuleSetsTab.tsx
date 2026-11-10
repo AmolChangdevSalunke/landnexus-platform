@@ -20,6 +20,7 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { Input } from '../../components/ui/Input'
+import { LinkButton } from '../../components/ui/LinkButton'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Textarea } from '../../components/ui/Textarea'
@@ -180,6 +181,13 @@ export function RuleSetsTab() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      <LinkButton
+                        to={`/compensation/rule-sets/${ruleSet.id}`}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        View full definition
+                      </LinkButton>
                       {ruleSet.status === 'DRAFT' && canApprove ? (
                         isMaker ? (
                           <span className="text-xs text-slate-500" title="Maker-checker rule">

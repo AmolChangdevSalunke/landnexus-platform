@@ -24,6 +24,7 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
 import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { ErrorState } from '../../components/ui/ErrorState'
+import { LinkButton } from '../../components/ui/LinkButton'
 import { Modal } from '../../components/ui/Modal'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Textarea } from '../../components/ui/Textarea'
@@ -54,6 +55,7 @@ export function PaymentsTab({
   const { can } = useAuth()
   const dispatch = useAppDispatch()
   const canRelease = can(PERMISSION.PAYMENT_RELEASE)
+  const canReadValuations = can(PERMISSION.VALUATION_READ)
   const canReadLandowners = can(PERMISSION.LANDOWNER_READ)
   const [reloadTick, setReloadTick] = useState(0)
   const [busyPaymentId, setBusyPaymentId] = useState<string | null>(null)
@@ -194,6 +196,23 @@ export function PaymentsTab({
           <span className="text-xs text-slate-500">—</span>
         ),
     },
+    ...(canReadValuations
+      ? [
+          {
+            key: 'estimate',
+            header: 'Estimate',
+            render: (payment: PaymentResponse) => (
+              <LinkButton
+                to={`/compensation/valuations/${payment.valuationId}`}
+                variant="ghost"
+                size="sm"
+              >
+                View
+              </LinkButton>
+            ),
+          } satisfies TableColumn<PaymentResponse>,
+        ]
+      : []),
     {
       key: 'attempts',
       header: 'Attempts',
@@ -350,6 +369,15 @@ export function PaymentsTab({
                         Generate payments
                       </Button>
                     )}
+                    {canReadValuations ? (
+                      <LinkButton
+                        to={`/compensation/valuations/${valuation.id}`}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        View estimate
+                      </LinkButton>
+                    ) : null}
                   </li>
                 )
               })}

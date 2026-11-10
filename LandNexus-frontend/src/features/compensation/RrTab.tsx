@@ -30,6 +30,7 @@ import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { Input } from '../../components/ui/Input'
+import { LinkButton } from '../../components/ui/LinkButton'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -338,6 +339,9 @@ function RrFamilyCard({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <LinkButton to={`/compensation/rr-cases/${rrCase.id}`} variant="ghost" size="sm">
+            Open full record
+          </LinkButton>
           {canManage && actions.has('ADD_ENTITLEMENT') ? (
             <Button
               size="sm"

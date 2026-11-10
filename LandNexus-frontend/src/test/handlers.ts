@@ -310,6 +310,70 @@ export const handlers = [
     }),
   ),
 
+  /* Compensation by-id defaults: minimal records, tests override with fixtures. */
+  http.get(`${API_BASE_URL}/compensation/valuations/:id`, ({ params }) =>
+    HttpResponse.json({
+      id: params.id,
+      caseId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      caseParcelId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      parcelId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      versionNo: 1,
+      awardedAreaHa: 1,
+      classification: 'AGRICULTURAL_IRRIGATED',
+      ratePerHa: 1000000,
+      ruleSetName: 'Default rule set',
+      ruleSetVersion: 1,
+      referenceDate: '2026-01-01',
+      assetTotal: 0,
+      totalAmount: 1000000,
+      status: 'DRAFT',
+      preparedByUsername: 'valuation.officer',
+      decidedByUserId: null,
+      decidedAt: null,
+      decisionRemarks: null,
+      createdAt: '2026-02-01T10:00:00Z',
+      lines: [],
+      availableActions: [],
+    }),
+  ),
+
+  http.get(`${API_BASE_URL}/compensation/rr-cases/:id`, ({ params }) =>
+    HttpResponse.json({
+      id: params.id,
+      caseId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      landownerId: 'ffffffff-1111-4fff-8fff-ffffffffffff',
+      displaced: false,
+      livelihoodLost: false,
+      status: 'IDENTIFIED',
+      notes: null,
+      createdByUserId: '11111111-1111-4111-8111-111111111111',
+      approvedByUserId: null,
+      decidedAt: null,
+      entitlements: [],
+      availableActions: [],
+    }),
+  ),
+
+  http.get(`${API_BASE_URL}/compensation/rule-sets/:id`, ({ params }) =>
+    HttpResponse.json({
+      id: params.id,
+      name: 'Default rule set',
+      version: 1,
+      framework: 'LARR_2013',
+      stateId: null,
+      districtId: null,
+      effectiveFrom: '2026-01-01',
+      effectiveTo: null,
+      description: null,
+      status: 'DRAFT',
+      createdByUserId: '11111111-1111-4111-8111-111111111111',
+      approvedByUserId: null,
+      approvedAt: null,
+      retireReason: null,
+      components: [],
+    }),
+  ),
+
   /* GIS defaults: no geometry recorded yet. Tests override these per case. */
   http.get(`${API_BASE_URL}/gis/parcels/:id/boundary`, ({ request }) =>
     HttpResponse.json(
