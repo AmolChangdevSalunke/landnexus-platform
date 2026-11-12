@@ -1,6 +1,12 @@
 import type { ButtonVariant } from '../../components/ui/Button'
 import type { BadgeVariant } from '../../components/ui/Badge'
-import type { ProjectType, ProposalAction, ProposalStatus } from '../../api/types'
+import type {
+  AssignmentStage,
+  AssignmentStatus,
+  ProjectType,
+  ProposalAction,
+  ProposalStatus,
+} from '../../api/types'
 
 export const PROJECT_TYPES: readonly ProjectType[] = [
   'NATIONAL_HIGHWAY',
@@ -184,7 +190,7 @@ export function actionSuccessMessage(action: ProposalAction, projectCode: string
       return 'Proposal rejected at scrutiny.'
     case 'APPROVE':
       return projectCode
-        ? `Proposal approved. Project ${projectCode} was created.`
+        ? `Proposal approved. Project ${projectCode} was created and acquisition initiation started.`
         : 'Proposal approved. A project was created.'
     case 'REJECT':
       return 'Proposal rejected.'
@@ -208,4 +214,16 @@ export function noActionMessage(status: ProposalStatus): string {
     case 'REJECTED':
       return 'This proposal is rejected. It is final.'
   }
+}
+
+export const ASSIGNMENT_STAGE_LABELS: Record<AssignmentStage, string> = {
+  SCRUTINY: 'Scrutiny',
+  DECISION: 'Decision',
+}
+
+export const ASSIGNMENT_STATUS_LABELS: Record<AssignmentStatus, string> = {
+  PENDING: 'Pending',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  REASSIGNED: 'Reassigned',
 }

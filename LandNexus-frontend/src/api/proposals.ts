@@ -1,11 +1,14 @@
 import { apiClient } from './client'
 import type {
+  MyTask,
   PageResponse,
   ProposalAction,
+  ProposalAssignment,
   ProposalHistoryEntry,
   ProposalRequest,
   ProposalResponse,
   ProposalStatus,
+  ProposalValidationResponse,
   ProposalVersion,
 } from './types'
 
@@ -65,6 +68,25 @@ export async function getProposalVersions(id: string): Promise<ProposalVersion[]
   const { data } = await apiClient.get<ProposalVersion[]>(
     `/projects/proposals/${id}/versions`,
   )
+  return data
+}
+
+export async function getProposalValidation(id: string): Promise<ProposalValidationResponse> {
+  const { data } = await apiClient.get<ProposalValidationResponse>(`/projects/proposals/${id}/validation`)
+  return data
+}
+
+/** Routing history of one proposal, oldest first. */
+export async function getProposalAssignments(id: string): Promise<ProposalAssignment[]> {
+  const { data } = await apiClient.get<ProposalAssignment[]>(`/projects/proposals/${id}/assignments`)
+  return data
+}
+
+/** Open assignments of the signed-in user, newest first. */
+export async function getMyTasks(page = 0, size = 20): Promise<PageResponse<MyTask>> {
+  const { data } = await apiClient.get<PageResponse<MyTask>>('/projects/proposals/my-tasks', {
+    params: { page, size },
+  })
   return data
 }
 

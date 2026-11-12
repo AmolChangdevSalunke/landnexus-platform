@@ -20,4 +20,7 @@ public interface AcquisitionCaseRepository extends JpaRepository<AcquisitionCase
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from AcquisitionCase c where c.id = :id")
     Optional<AcquisitionCase> findByIdForUpdate(@Param("id") UUID id);
+
+    /** Read all cases for a project; multiple rows indicate legacy duplicate data that must be reconciled explicitly. */
+    java.util.List<AcquisitionCase> findAllByProjectId(UUID projectId);
 }

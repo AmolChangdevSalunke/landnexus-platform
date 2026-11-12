@@ -2,6 +2,8 @@ import { apiClient } from './client'
 import type {
   Dashboard,
   EscalationPage,
+  ForecastOverview,
+  NlamsDashboard,
   ReportInfo,
   ReportResult,
   ScanResult,
@@ -27,6 +29,20 @@ export async function getDashboard({
   districtId,
 }: ScopeFilter = {}): Promise<Dashboard> {
   const { data } = await apiClient.get<Dashboard>('/monitoring/dashboard', {
+    params: {
+      stateId: stateId || undefined,
+      districtId: districtId || undefined,
+    },
+  })
+  return data
+}
+
+/** Real-time NLAMS progress. The page polls this while its tab is visible. */
+export async function getNlams({
+  stateId,
+  districtId,
+}: ScopeFilter = {}): Promise<NlamsDashboard> {
+  const { data } = await apiClient.get<NlamsDashboard>('/monitoring/nlams', {
     params: {
       stateId: stateId || undefined,
       districtId: districtId || undefined,
@@ -155,6 +171,23 @@ export async function getEscalations({
       districtId: districtId || undefined,
       page,
       size,
+    },
+  })
+  return data
+}
+
+/* ------------------------------------------------------------------ */
+/* Timeline forecast (statistical, not machine learning)               */
+/* ------------------------------------------------------------------ */
+
+export async function getForecast({
+  stateId,
+  districtId,
+}: ScopeFilter = {}): Promise<ForecastOverview> {
+  const { data } = await apiClient.get<ForecastOverview>('/monitoring/forecast', {
+    params: {
+      stateId: stateId || undefined,
+      districtId: districtId || undefined,
     },
   })
   return data

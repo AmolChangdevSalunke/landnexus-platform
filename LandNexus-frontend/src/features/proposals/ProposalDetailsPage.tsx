@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Pencil, ShieldCheck } from 'lucide-react'
 import { toApiErrorInfo } from '../../api/errors'
 import {
   getProposal,
+  getProposalAssignments,
   getProposalHistory,
+  getProposalValidation,
   getProposalVersions,
 } from '../../api/proposals'
-import type { ProposalHistoryEntry, ProposalResponse } from '../../api/types'
+import type {
+  ProposalAssignment,
+  ProposalHistoryEntry,
+  ProposalResponse,
+  ProposalValidationResponse,
+} from '../../api/types'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
@@ -36,7 +43,7 @@ import {
   historyActionLabel,
 } from './labels'
 import { StatusBadge } from './StatusBadge'
-import { StatusTimeline } from './StatusTimeline'
+import { NlamsStageStepper } from './NlamsStageStepper'
 import { VersionViewer } from './VersionViewer'
 
 const EDITABLE_STATUSES = new Set(['DRAFT', 'CLARIFICATION_REQUESTED'])
@@ -84,15 +91,31 @@ export function ProposalDetailsPage() {
     ready,
   )
 
+  const validationQuery = useApiQuery<ProposalValidationResponse | null>(
+    () => (id ? getProposalValidation(id) : Promise.resolve(null)),
+    [id],
+    ready,
+  )
+
+  const assignmentsQuery = useApiQuery<ProposalAssignment[]>(
+    () => (id ? getProposalAssignments(id) : Promise.resolve([])),
+    [id],
+    ready,
+  )
+
   const reloadProposal = proposalQuery.reload
   const reloadHistory = historyQuery.reload
   const reloadVersions = versionsQuery.reload
+  const reloadValidation = validationQuery.reload
+  const reloadAssignments = assignmentsQuery.reload
 
   const reloadAll = useCallback(() => {
     reloadProposal()
     reloadHistory()
     reloadVersions()
-  }, [reloadProposal, reloadHistory, reloadVersions])
+    reloadValidation()
+    reloadAssignments()
+  }, [reloadProposal, reloadHistory, reloadVersions, reloadValidation, reloadAssignments])
 
   const districtId = proposal?.districtId ?? ''
   const [villageLoad, setVillageLoad] = useState<{
@@ -368,9 +391,20 @@ export function ProposalDetailsPage() {
           </Card>
 
           <Card className="p-5">
-            <CardHeader title="Status timeline" description="The workflow shape from the project plan." />
+            <CardHeader
+              title="NLAMS workflow"
+              description="Automated routing journey. Assignment details come from the backend."
+            />
             <div className="mt-4">
-              <StatusTimeline status={proposal.status} />
+              <NlamsStageStepper
+                status={proposal.status}
+                assignments={assignmentsQuery.data ?? []}
+              />
+              {assignmentsQuery.error ? (
+                <p role="alert" className="mt-3 text-xs font-medium text-danger-700">
+                  Assignment details could not be loaded. {assignmentsQuery.error.message}
+                </p>
+              ) : null}
             </div>
           </Card>
 
@@ -446,15 +480,41 @@ export function ProposalDetailsPage() {
         <div className="space-y-4">
           <ActionBar proposal={proposal} onUpdated={() => reloadAll()} onReload={reloadAll} />
 
+          <Card className="p-4">
+            <CardHeader
+              title="DGOR validation"
+              description="System-assisted validation of mandatory fields, location, and supporting information."
+              action={
+                <Button variant="outline" size="sm" onClick={reloadValidation} disabled={validationQuery.isLoading}>
+                  <ShieldCheck aria-hidden="true" className="mr-1.5 h-4 w-4" />
+                  Revalidate
+                </Button>
+              }
+            />
+            <div className="mt-3">
+              {validationQuery.isLoading ? (
+                <Skeleton className="h-24 w-full" />
+              ) : validationQuery.error ? (
+                <ErrorState
+                  title="Could not load validation"
+                  message={validationQuery.error.message}
+                  onRetry={reloadValidation}
+                />
+              ) : validationQuery.data ? (
+                <ValidationSummary validation={validationQuery.data} />
+              ) : (
+                <EmptyState title="No validation result" description="Validation results will appear here." />
+              )}
+            </div>
+          </Card>
+
           {proposal.projectCode ? (
             <Card className="p-4">
               <CardHeader
                 title="Government project"
                 description="Created automatically when this proposal was approved."
               />
-              <p className="mt-3 text-sm text-slate-600">
-                Project code
-              </p>
+              <p className="mt-3 text-sm text-slate-600">Project code</p>
               <Link
                 to="/projects"
                 className="mt-1 inline-block font-mono text-base font-semibold text-blue-700 hover:text-blue-800"
@@ -462,10 +522,21 @@ export function ProposalDetailsPage() {
               >
                 {proposal.projectCode}
               </Link>
-              <p className="mt-2 text-xs text-slate-500">
-                The project register is read-only. Open it to find this project, its details and
-                the link back to this proposal.
-              </p>
+              {proposal.acquisitionCaseNumber ? (
+                <>
+                  <p className="mt-3 text-sm text-slate-600">Acquisition case</p>
+                  <p className="mt-1 font-mono text-base font-semibold text-navy-900">
+                    {proposal.acquisitionCaseNumber}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-500">
+                    The acquisition case was initiated automatically after approval. Open Acquisition to continue survey, notices, award, possession, and R&amp;R tracking.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">
+                  The project register is read-only. Open it to find this project, its details and the link back to this proposal.
+                </p>
+              )}
             </Card>
           ) : null}
 
@@ -539,5 +610,44 @@ function HistoryRow({ entry }: { entry: ProposalHistoryEntry }) {
         </p>
       ) : null}
     </li>
+  )
+}
+
+function ValidationSummary({ validation }: { validation: ProposalValidationResponse }) {
+  const failures = validation.items.filter((i) => i.severity === 'FAIL')
+  const warnings = validation.items.filter((i) => i.severity === 'WARN')
+  return (
+    <div className="space-y-3">
+      <Alert variant={validation.passed ? 'success' : 'error'}>
+        {validation.passed
+          ? 'Mandatory validation checks passed. Warnings may still require attention.'
+          : `Validation failed with ${failures.length} mandatory issue(s). Resolve them before submission.`}
+      </Alert>
+      <div className="space-y-2">
+        {validation.items.map((item) => (
+          <div
+            key={item.code}
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-navy-900">{item.code.replaceAll('_', ' ')}</span>
+              <Badge
+                variant={
+                  item.severity === 'PASS' ? 'success' : item.severity === 'WARN' ? 'warning' : 'danger'
+                }
+              >
+                {item.severity}
+              </Badge>
+            </div>
+            <p className="mt-1 text-slate-600">{item.message}</p>
+          </div>
+        ))}
+      </div>
+      {(warnings.length > 0 || failures.length > 0) && (
+        <p className="text-xs text-slate-500">
+          {failures.length} fail, {warnings.length} warning, {validation.items.length - failures.length - warnings.length} pass.
+        </p>
+      )}
+    </div>
   )
 }

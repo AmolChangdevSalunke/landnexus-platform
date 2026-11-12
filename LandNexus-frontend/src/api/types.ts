@@ -305,6 +305,7 @@ export interface ProposalResponse {
   createdAt: string
   updatedAt: string
   projectCode: string | null
+  acquisitionCaseNumber?: string | null
   availableActions: ProposalAction[]
 }
 
@@ -323,6 +324,59 @@ export interface ProposalVersion {
   createdByUsername: string
   createdAt: string
   snapshot: string
+}
+
+export interface ProposalValidationItem {
+  code: string
+  severity: 'PASS' | 'WARN' | 'FAIL'
+  message: string
+}
+
+export interface ProposalValidationResponse {
+  proposalId: string
+  passed: boolean
+  items: ProposalValidationItem[]
+}
+
+/* ------------------------------------------------------------------ */
+/* Proposal routing and assignments (NLAMS)                            */
+/* ------------------------------------------------------------------ */
+
+export type AssignmentStage = 'SCRUTINY' | 'DECISION'
+
+export type AssignmentStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REASSIGNED'
+
+export interface ProposalAssignment {
+  id: string
+  proposalId: string
+  stage: AssignmentStage
+  assignedUserId: string
+  assignedUsername: string | null
+  assignedBy: string
+  ruleNote: string | null
+  status: AssignmentStatus
+  assignedAt: string
+  startedAt: string | null
+  completedAt: string | null
+  dueAt: string | null
+  overdue: boolean
+}
+
+export interface MyTask {
+  assignmentId: string
+  proposalId: string
+  proposalNumber: string | null
+  title: string | null
+  stage: AssignmentStage
+  assignmentStatus: AssignmentStatus
+  proposalStatus: ProposalStatus | null
+  assignedAt: string
+  dueAt: string | null
+  overdue: boolean
+  estimatedLandAreaHa: number | null
+  districtId: string | null
+  districtName: string | null
+  projectType: ProjectType | null
 }
 
 /* ------------------------------------------------------------------ */
@@ -1326,6 +1380,90 @@ export interface Dashboard {
   notes: string[]
 }
 
+/* ------------------------------------------------------------------ */
+/* NLAMS progress (real-time monitoring)                               */
+/* ------------------------------------------------------------------ */
+
+export interface NlamsProject {
+  projectId: string
+  projectCode: string | null
+  title: string
+  projectType: ProjectType
+  projectStatus: string
+  districtId: string
+  districtName: string | null
+  estimatedLandAreaHa: number
+  alignmentLengthKm: number | null
+  cases: number
+  openCases: number
+  casesAwaitingNotification: number
+  casesNotified: number
+  casesAwaitingAward: number
+  casesPossessionComplete: number
+  parcelsIdentified: number
+  identifiedHa: number
+  parcelsNotified: number
+  notifiedHa: number
+  awards: number
+  parcelsAwarded: number
+  awardedHa: number
+  parcelsPossessed: number
+  possessionHa: number
+  possessionPhysical: number
+  possessionDeemed: number
+  notices: number
+  objections: number
+  objectionsOpen: number
+  assessedTotal: number
+  awaitingApprovalTotal: number
+  paidTotal: number
+  sentTotal: number
+  failedTotal: number
+  instructedTotal: number
+  affectedFamilies: number
+  displacedFamilies: number
+  livelihoodLostFamilies: number
+  rrCases: number
+  rrCompleted: number
+  rrEntitlements: number
+  rrDelivered: number
+  progressPercent: number
+  currentStage: string
+}
+
+export interface NlamsTotals {
+  projects: number
+  projectsInAcquisition: number
+  totalCases: number
+  openCases: number
+  parcelsIdentified: number
+  identifiedHa: number
+  parcelsNotified: number
+  notifiedHa: number
+  parcelsAwarded: number
+  awardedHa: number
+  parcelsPossessed: number
+  possessionHa: number
+  assessedTotal: number
+  paidTotal: number
+  sentTotal: number
+  failedTotal: number
+  affectedFamilies: number
+  displacedFamilies: number
+  rrEntitlements: number
+  rrDelivered: number
+}
+
+export interface NlamsDashboard {
+  generatedAt: string
+  stateId: string | null
+  districtId: string | null
+  paymentMode: 'SIMULATED'
+  totals: NlamsTotals
+  projectsByStage: Record<string, number>
+  projects: NlamsProject[]
+}
+
 export type ReportColumnType = 'TEXT' | 'NUMBER' | 'DATE' | 'MONEY'
 
 export interface ReportColumn {
@@ -1455,5 +1593,50 @@ export interface Settings {
   slaSchedulerEnabled: boolean
   slaScanIntervalMinutes: number
   businessTimeZone: string
+  notes: string[]
+}
+
+/* ------------------------------------------------------------------ */
+/* Timeline forecast (statistical, from this system's own history)     */
+/* ------------------------------------------------------------------ */
+
+export type ForecastRisk = 'HIGH' | 'MEDIUM' | 'LOW' | 'INSUFFICIENT_DATA'
+
+export interface ForecastStageStat {
+  itemType: SlaItemType
+  title: string
+  samples: number
+  medianHours: number | null
+  p90Hours: number | null
+  warnAfterHours: number
+  breachAfterHours: number
+  open: number
+  atRisk: number
+}
+
+export interface ForecastItem {
+  itemType: SlaItemType
+  title: string
+  entityId: string
+  reference: string
+  districtId: string
+  since: string
+  ageHours: number
+  risk: ForecastRisk
+  breachProbability: number | null
+  expectedRemainingHours: number | null
+  samples: number
+  comparable: number
+  explanation: string
+  responsibleRole: string
+}
+
+export interface ForecastOverview {
+  generatedAt: string
+  method: string
+  methodNote: string
+  stages: ForecastStageStat[]
+  items: ForecastItem[]
+  itemsTruncated: boolean
   notes: string[]
 }

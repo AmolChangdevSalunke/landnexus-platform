@@ -1,12 +1,14 @@
 package com.landnexus.administration.application;
 
 import com.landnexus.administration.domain.District;
+import com.landnexus.administration.domain.GeographicScope;
 import com.landnexus.administration.domain.RecordStatus;
 import com.landnexus.administration.domain.Taluka;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.domain.Village;
 import com.landnexus.administration.infrastructure.DepartmentRepository;
 import com.landnexus.administration.infrastructure.DistrictRepository;
+import com.landnexus.administration.infrastructure.GeographicScopeRepository;
 import com.landnexus.administration.infrastructure.TalukaRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
 import com.landnexus.administration.infrastructure.VillageRepository;
@@ -39,6 +41,10 @@ public class AdministrationLookupService {
     public record UserRef(UUID id, String username) {
     }
 
+    /** A routing candidate: the highest geographic level the user's scope grants (CENTRAL, STATE or DISTRICT). */
+    public record RoutingCandidate(UUID id, String username, String scopeLevel) {
+    }
+
     public record VillageDetailRef(UUID id, String name, UUID talukaId, UUID districtId, UUID stateId) {
     }
 
@@ -47,16 +53,19 @@ public class AdministrationLookupService {
     private final VillageRepository villages;
     private final DepartmentRepository departments;
     private final UserAccountRepository users;
+    private final GeographicScopeRepository scopes;
     private final GeoScopeService geoScope;
 
     public AdministrationLookupService(DistrictRepository districts, TalukaRepository talukas,
                                        VillageRepository villages, DepartmentRepository departments,
-                                       UserAccountRepository users, GeoScopeService geoScope) {
+                                       UserAccountRepository users, GeographicScopeRepository scopes,
+                                       GeoScopeService geoScope) {
         this.districts = districts;
         this.talukas = talukas;
         this.villages = villages;
         this.departments = departments;
         this.users = users;
+        this.scopes = scopes;
         this.geoScope = geoScope;
     }
 
@@ -114,5 +123,45 @@ public class AdministrationLookupService {
                     return new VillageDetailRef(v.getId(), v.getName(), taluka.getId(), district.getId(),
                             district.getState().getId());
                 });
+    }
+
+    /**
+     * Enabled users holding the role whose geographic scope covers the district, with the highest level of that
+     * scope. Used by proposal routing to tell a district-level authority from a state-level one.
+     */
+    public List<RoutingCandidate> findRoutingCandidates(String roleCode, UUID districtId) {
+        District district = districts.findById(districtId).orElse(null);
+        if (district == null) {
+            return List.of();
+        }
+        List<RoutingCandidate> result = new ArrayList<>();
+        for (UserAccount user : users.findEnabledByRoleCode(roleCode)) {
+            CurrentActor actor = new CurrentActor(user.getId(), user.getUsername(), user.roleCodes());
+            if (geoScope.resolve(actor).allows(district)) {
+                result.add(new RoutingCandidate(user.getId(), user.getUsername(), scopeLevel(user)));
+            }
+        }
+        return result;
+    }
+
+    public Optional<UserRef> findUser(UUID id) {
+        return users.findById(id).map(u -> new UserRef(u.getId(), u.getUsername()));
+    }
+
+    /** CENTRAL for nationwide roles, STATE for a state or division scope, DISTRICT for a district scope. */
+    private String scopeLevel(UserAccount user) {
+        if (user.roleCodes().stream().anyMatch(GeoScopeService.NATIONAL_ROLES::contains)) {
+            return "CENTRAL";
+        }
+        boolean districtScope = false;
+        for (GeographicScope scope : scopes.findByUser_Id(user.getId())) {
+            if (scope.getState() != null || scope.getDivision() != null) {
+                return "STATE";
+            }
+            if (scope.getDistrict() != null) {
+                districtScope = true;
+            }
+        }
+        return districtScope ? "DISTRICT" : "NONE";
     }
 }

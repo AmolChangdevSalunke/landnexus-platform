@@ -145,6 +145,23 @@ export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
     ]
   }
 
+  if (pathname === '/monitoring' || pathname.startsWith('/monitoring/')) {
+    const monitoringLabels: Record<string, string> = {
+      '/monitoring': 'Dashboard',
+      '/monitoring/projects': 'Projects',
+      '/monitoring/nlams': 'NLAMS progress',
+      '/monitoring/geography': 'Districts and states',
+      '/monitoring/lifecycle': 'Acquisition lifecycle',
+      '/monitoring/compensation': 'Compensation',
+      '/monitoring/reports': 'MIS reports',
+      '/monitoring/sla': 'SLA and alerts',
+    }
+    const label = monitoringLabels[pathname] ?? titleCaseSlug(pathname.split('/')[2] ?? '')
+    return pathname === '/monitoring'
+      ? [{ label: 'Monitoring and MIS' }, { label }]
+      : [{ label: 'Monitoring and MIS', to: '/monitoring' }, { label }]
+  }
+
   if (pathname.startsWith('/roadmap/')) {
     const module = pathname.split('/')[2] ?? ''
     return [

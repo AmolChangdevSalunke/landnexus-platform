@@ -13,6 +13,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -25,6 +26,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -35,9 +37,11 @@ import org.springframework.web.context.WebApplicationContext;
  * Real database, real filter chain, real tokens: the whole consultant proposal workflow.
  * Proposal history and versions are append-only, so cleanup switches those two triggers off briefly
  * (test-only, in a finally block). Audit rows tagged "it-actor" stay behind by design.
+ * Runs only against isolated disposable PostgreSQL (never landnexus_dev).
  */
 @SpringBootTest
-class ProposalWorkflowIntegrationTest {
+@ActiveProfiles("integration")
+class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String ADMIN = "/api/v1/administration";
@@ -107,7 +111,20 @@ class ProposalWorkflowIntegrationTest {
         String like = prefix + "%";
         String owners = "(SELECT id FROM users WHERE username LIKE ?)";
         jdbc.update("DELETE FROM notifications WHERE recipient_user_id IN " + owners, like);
-        jdbc.update("DELETE FROM project_villages WHERE project_id IN (SELECT id FROM projects WHERE owner_user_id IN " + owners + ")", like);
+        String projectsByOwner = "SELECT id FROM projects WHERE owner_user_id IN " + owners;
+        String casesByProject = "SELECT id FROM acquisition_cases WHERE project_id IN (" + projectsByOwner + ")";
+        jdbc.update("DELETE FROM case_villages WHERE case_id IN (" + casesByProject + ")", like);
+        jdbc.update("DELETE FROM field_surveys WHERE case_id IN (" + casesByProject + ")", like);
+        jdbc.update("DELETE FROM parcel_owners WHERE parcel_id IN (SELECT id FROM affected_parcels WHERE case_id IN (" + casesByProject + "))", like);
+        jdbc.update("DELETE FROM affected_parcels WHERE case_id IN (" + casesByProject + ")", like);
+        try {
+            jdbc.execute("ALTER TABLE acquisition_case_history DISABLE TRIGGER trg_case_history_append_only");
+            jdbc.update("DELETE FROM acquisition_case_history WHERE case_id IN (" + casesByProject + ")", like);
+        } finally {
+            jdbc.execute("ALTER TABLE acquisition_case_history ENABLE TRIGGER trg_case_history_append_only");
+        }
+        jdbc.update("DELETE FROM acquisition_cases WHERE project_id IN (" + projectsByOwner + ")", like);
+        jdbc.update("DELETE FROM project_villages WHERE project_id IN (" + projectsByOwner + ")", like);
         jdbc.update("DELETE FROM projects WHERE owner_user_id IN " + owners, like);
         jdbc.update("DELETE FROM proposal_villages WHERE proposal_id IN (SELECT id FROM proposals WHERE owner_user_id IN " + owners + ")", like);
         try {

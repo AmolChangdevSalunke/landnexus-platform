@@ -17,6 +17,7 @@ import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.domain.Village;
 import com.landnexus.administration.infrastructure.DepartmentRepository;
 import com.landnexus.administration.infrastructure.DistrictRepository;
+import com.landnexus.administration.infrastructure.GeographicScopeRepository;
 import com.landnexus.administration.infrastructure.TalukaRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
 import com.landnexus.administration.infrastructure.VillageRepository;
@@ -40,13 +41,14 @@ class AdministrationLookupServiceTest {
     @Mock private VillageRepository villages;
     @Mock private DepartmentRepository departments;
     @Mock private UserAccountRepository users;
+    @Mock private GeographicScopeRepository scopes;
     @Mock private GeoScopeService geoScope;
 
     private AdministrationLookupService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdministrationLookupService(districts, talukas, villages, departments, users, geoScope);
+        service = new AdministrationLookupService(districts, talukas, villages, departments, users, scopes, geoScope);
     }
 
     private static <T> T withId(T entity, UUID id) {

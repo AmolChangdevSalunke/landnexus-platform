@@ -16,6 +16,16 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * Fetches ONE WMS GetMap picture for a bounding box on behalf of the browser. The browser never sees the provider URL or
@@ -88,6 +98,133 @@ public class ImageryService {
         } catch (ImageryException e) {
             return new TestResult(false, null, null, 0, elapsed(started), e.getMessage());
         }
+    }
+
+    public record LayerInfo(String name, String title, boolean queryable) {
+    }
+
+    public record Capabilities(String version, List<String> formats, List<String> crs, int matchingLayers, boolean truncated,
+                               List<LayerInfo> layers) {
+    }
+
+    static final int MAX_CAPABILITIES_BYTES = 8 * 1024 * 1024;
+    static final int MAX_LAYERS_RETURNED = 300;
+
+    /** Asks the provider which layers, formats and CRS it offers. Never returns the URL or the key. */
+    public Capabilities capabilities(String filter) {
+        if (!config.enabled()) {
+            throw new ImageryException(503, "Satellite imagery is not enabled on this server");
+        }
+        if (filter != null && filter.length() > 80) {
+            throw new ImageryException(400, "The filter is too long");
+        }
+        String base = config.baseUrl();
+        StringBuilder q = new StringBuilder(base.contains("?") ? (base.endsWith("?") || base.endsWith("&") ? "" : "&") : "?");
+        q.append("service=WMS&request=GetCapabilities&version=").append(enc(config.wmsVersion()));
+        if ("QUERY_PARAM".equals(config.authMode())) {
+            q.append("&").append(enc(config.authName())).append("=").append(enc(config.authSecret()));
+        }
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(base + q))
+                .timeout(Duration.ofSeconds(config.timeoutSeconds())).header("Accept", "text/xml,application/xml").GET();
+        if ("HEADER".equals(config.authMode())) {
+            request.header(config.authName(), config.authSecret());
+        }
+        byte[] bytes;
+        try {
+            HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+            try (InputStream in = response.body()) {
+                if (response.statusCode() != 200) {
+                    throw new ImageryException(502, "The imagery service answered with HTTP " + response.statusCode());
+                }
+                String type = response.headers().firstValue("Content-Type").orElse("").toLowerCase(Locale.ROOT);
+                if (!type.contains("xml")) {
+                    throw new ImageryException(502, "The imagery service did not return capabilities XML (check the URL and the credentials)");
+                }
+                bytes = in.readNBytes(MAX_CAPABILITIES_BYTES + 1);
+                if (bytes.length > MAX_CAPABILITIES_BYTES) {
+                    throw new ImageryException(502, "The capabilities document is too large");
+                }
+            }
+        } catch (HttpTimeoutException e) {
+            throw new ImageryException(504, "The imagery service did not answer in time");
+        } catch (IOException e) {
+            throw new ImageryException(502, "The imagery service could not be reached");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ImageryException(502, "The request to the imagery service was interrupted");
+        }
+        return parseCapabilities(bytes, filter);
+    }
+
+    /**
+     * Reads the capabilities XML. A DOCTYPE is allowed (WMS 1.1.1 documents carry one) but nothing external is ever
+     * loaded: external entities and DTDs are off, so a hostile answer cannot read files or call other servers.
+     */
+    static Capabilities parseCapabilities(byte[] xml, String filter) {
+        Document doc;
+        try {
+            DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
+            f.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            f.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            f.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            f.setXIncludeAware(false);
+            f.setExpandEntityReferences(false);
+            f.setNamespaceAware(false);
+            doc = f.newDocumentBuilder().parse(new ByteArrayInputStream(xml));
+        } catch (Exception e) {
+            throw new ImageryException(502, "The capabilities document could not be read");
+        }
+        String needle = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        LinkedHashSet<String> formats = new LinkedHashSet<>();
+        LinkedHashSet<String> crs = new LinkedHashSet<>();
+        List<LayerInfo> matches = new ArrayList<>();
+        int matching = 0;
+        NodeList all = doc.getElementsByTagName("*");
+        for (int i = 0; i < all.getLength(); i++) {
+            Element e = (Element) all.item(i);
+            String name = local(e.getTagName());
+            if (name.equals("Format") && e.getParentNode() instanceof Element p && local(p.getTagName()).equals("GetMap")) {
+                formats.add(e.getTextContent().trim());
+            } else if ((name.equals("SRS") || name.equals("CRS")) && crs.size() < 60) {
+                for (String part : e.getTextContent().trim().split("\\s+")) {
+                    if (!part.isEmpty() && crs.size() < 60) {
+                        crs.add(part);
+                    }
+                }
+            } else if (name.equals("Layer")) {
+                String layerName = childText(e, "Name");
+                if (layerName == null || layerName.isEmpty()) {
+                    continue;
+                }
+                String title = childText(e, "Title");
+                boolean hit = needle.isEmpty() || layerName.toLowerCase(Locale.ROOT).contains(needle)
+                        || (title != null && title.toLowerCase(Locale.ROOT).contains(needle));
+                if (hit) {
+                    matching++;
+                    if (matches.size() < MAX_LAYERS_RETURNED) {
+                        String q = e.getAttribute("queryable");
+                        matches.add(new LayerInfo(layerName, title == null ? "" : title, "1".equals(q) || "true".equalsIgnoreCase(q)));
+                    }
+                }
+            }
+        }
+        return new Capabilities(doc.getDocumentElement().getAttribute("version"), List.copyOf(formats), List.copyOf(crs), matching,
+                matching > matches.size(), List.copyOf(matches));
+    }
+
+    private static String local(String tag) {
+        int i = tag.indexOf(':');
+        return i < 0 ? tag : tag.substring(i + 1);
+    }
+
+    private static String childText(Element parent, String childName) {
+        for (Node n = parent.getFirstChild(); n != null; n = n.getNextSibling()) {
+            if (n instanceof Element c && local(c.getTagName()).equals(childName)) {
+                return c.getTextContent().trim();
+            }
+        }
+        return null;
     }
 
     public Image fetch(Layer layer, double minLon, double minLat, double maxLon, double maxLat, int width, int height) {

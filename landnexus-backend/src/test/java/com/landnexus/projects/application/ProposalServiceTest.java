@@ -27,6 +27,7 @@ import com.landnexus.projects.domain.ProposalStatusHistory;
 import com.landnexus.projects.domain.ProposalVersion;
 import com.landnexus.projects.domain.ProposalWorkflow;
 import com.landnexus.projects.infrastructure.ProjectRepository;
+import com.landnexus.projects.infrastructure.ProposalAssignmentRepository;
 import com.landnexus.projects.infrastructure.ProposalRepository;
 import com.landnexus.projects.infrastructure.ProposalStatusHistoryRepository;
 import com.landnexus.projects.infrastructure.ProposalVersionRepository;
@@ -67,11 +68,15 @@ class ProposalServiceTest {
     @Mock private ProposalVersionRepository versions;
     @Mock private ProposalStatusHistoryRepository history;
     @Mock private ProjectRepository projects;
+    @Mock private ProposalAssignmentRepository assignmentRepository;
     @Mock private AdministrationLookupService lookup;
     @Mock private GeoScopeService geoScope;
     @Mock private ProposalAccess access;
     @Mock private NotificationService notifications;
     @Mock private AuditService audit;
+    @Mock private AcquisitionCaseInitiator acquisitionCaseInitiator;
+    @Mock private ProposalValidationService validationService;
+    @Mock private ProposalRoutingService routing;
 
     private ProposalService service;
 
@@ -96,10 +101,16 @@ class ProposalServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProposalService(proposals, versions, history, projects, lookup, geoScope, access,
-                notifications, audit, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ProposalService(proposals, versions, history, projects, assignmentRepository, lookup, geoScope,
+                access, notifications, audit, Clock.fixed(NOW, ZoneOffset.UTC), acquisitionCaseInitiator,
+                validationService, routing);
         lenient().when(proposals.saveAndFlush(any(Proposal.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(access.canView(any(), any(), any())).thenReturn(true);
+        lenient().when(validationService.validate(any())).thenReturn(new ProposalValidationService.ValidationResult(true, List.of()));
+        lenient().when(acquisitionCaseInitiator.initiateForApprovedProject(any(), any(), any()))
+                .thenReturn(Optional.of(new AcquisitionCaseInitiator.InitiatedCase(UUID.randomUUID(), "ACQ-2026-000001")));
+        lenient().when(acquisitionCaseInitiator.findCaseNumberByProjectId(any())).thenReturn(Optional.empty());
+        lenient().when(proposals.findCurrentById(any())).thenAnswer(inv -> proposals.findById(inv.getArgument(0)));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -139,7 +150,8 @@ class ProposalServiceTest {
 
     private Proposal stored(ProposalStatus status) {
         Proposal p = proposal(status);
-        when(proposals.findById(proposalId)).thenReturn(Optional.of(p));
+        lenient().when(proposals.findById(proposalId)).thenReturn(Optional.of(p));
+        lenient().when(proposals.findByIdForUpdate(proposalId)).thenReturn(Optional.of(p));
         return p;
     }
 
@@ -503,8 +515,76 @@ class ProposalServiceTest {
         Project project = new Project();
         project.setCode("PRJ-2026-000009");
         when(projects.findByProposalId(proposalId)).thenReturn(Optional.of(project));
+        when(acquisitionCaseInitiator.findCaseNumberByProjectId(any())).thenReturn(Optional.of("ACQ-2026-000009"));
 
-        assertThat(service.get(proposalId, consultant).projectCode()).isEqualTo("PRJ-2026-000009");
+        ProposalResponse response = service.get(proposalId, consultant);
+        assertThat(response.projectCode()).isEqualTo("PRJ-2026-000009");
+        assertThat(response.acquisitionCaseNumber()).isEqualTo("ACQ-2026-000009");
+    }
+
+    @Test
+    void repeatedApproval_whenAlreadyApprovedWithCompleteArtifacts_returnsExistingResultWithoutSideEffects() {
+        Proposal p = stored(ProposalStatus.APPROVED);
+        Project project = new Project();
+        ReflectionTestUtils.setField(project, "id", UUID.randomUUID());
+        project.setCode("PRJ-2026-000010");
+        when(projects.findByProposalId(proposalId)).thenReturn(Optional.of(project));
+        when(acquisitionCaseInitiator.findCaseNumberByProjectId(project.getId())).thenReturn(Optional.of("ACQ-2026-000010"));
+
+        ProposalResponse response = service.transition(proposalId, ProposalWorkflow.APPROVE, "again", authority);
+
+        assertThat(response.status()).isEqualTo(ProposalStatus.APPROVED);
+        assertThat(response.projectCode()).isEqualTo("PRJ-2026-000010");
+        assertThat(response.acquisitionCaseNumber()).isEqualTo("ACQ-2026-000010");
+        verify(projects, never()).saveAndFlush(any());
+        verify(acquisitionCaseInitiator, never()).initiateForApprovedProject(any(), any(), any());
+        verify(history, never()).save(any(ProposalStatusHistory.class));
+        verify(notifications, never()).notify(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void get_approvedProposal_withMultipleExistingCases_failsExplicitlyWithoutArbitrarySelection() {
+        stored(ProposalStatus.APPROVED);
+        Project project = new Project();
+        ReflectionTestUtils.setField(project, "id", UUID.randomUUID());
+        project.setCode("PRJ-2026-000011");
+        when(projects.findByProposalId(proposalId)).thenReturn(Optional.of(project));
+        when(acquisitionCaseInitiator.findCaseNumberByProjectId(project.getId()))
+                .thenThrow(new InvalidTransitionException("Multiple acquisition cases exist for project " + project.getId() + "; manual reconciliation is required"));
+
+        assertThatThrownBy(() -> service.get(proposalId, consultant))
+                .isInstanceOf(InvalidTransitionException.class)
+                .hasMessageContaining("Multiple acquisition cases exist");
+    }
+
+    @Test
+    void approve_constraintConflict_doesNotQueryForRecoveryInsideAttempt_andReturnsWinnerFromFreshRecovery() {
+        Proposal p = stored(ProposalStatus.RECOMMENDED);
+        p.setRecommendedByUserId(officerId);
+        Project winner = new Project();
+        UUID projectId = UUID.randomUUID();
+        ReflectionTestUtils.setField(winner, "id", projectId);
+        winner.setCode("PRJ-2026-000099");
+
+        // Attempt sees no project, tries to create, DB uniqueness aborts attempt transaction.
+        // First find (pre-check inside attempt) -> empty, second find (inside fresh recovery after rollback) -> winner.
+        when(projects.findByProposalId(proposalId)).thenReturn(Optional.empty(), Optional.of(winner));
+        when(projects.saveAndFlush(any(Project.class))).thenThrow(new org.springframework.dao.DataIntegrityViolationException("dup"));
+
+        // Fresh recovery sees approved + complete artifacts.
+        Proposal approved = proposal(ProposalStatus.APPROVED);
+        when(proposals.findCurrentById(proposalId)).thenReturn(Optional.of(approved));
+        when(acquisitionCaseInitiator.findCaseNumberByProjectId(projectId)).thenReturn(Optional.of("ACQ-2026-000099"));
+
+        ProposalResponse response = service.transition(proposalId, ProposalWorkflow.APPROVE, "Approved", authority);
+
+        assertThat(response.status()).isEqualTo(ProposalStatus.APPROVED);
+        assertThat(response.projectCode()).isEqualTo("PRJ-2026-000099");
+        assertThat(response.acquisitionCaseNumber()).isEqualTo("ACQ-2026-000099");
+        // Pre-check in attempt + one fresh recovery read only (no in-aborted-tx recovery SELECT after save failure).
+        verify(projects, org.mockito.Mockito.times(2)).findByProposalId(proposalId);
+        verify(history, never()).save(any(ProposalStatusHistory.class));
+        verify(notifications, never()).notify(any(), any(), any(), any(), any(), any());
     }
 
     @Test

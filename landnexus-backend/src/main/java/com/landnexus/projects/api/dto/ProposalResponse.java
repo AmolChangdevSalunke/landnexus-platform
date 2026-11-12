@@ -35,14 +35,19 @@ public record ProposalResponse(
         Instant createdAt,
         Instant updatedAt,
         String projectCode,
+        String acquisitionCaseNumber,
         List<String> availableActions) {
 
-    public static ProposalResponse from(Proposal p, String projectCode, List<String> availableActions) {
+    public static ProposalResponse from(Proposal p, String projectCode, String acquisitionCaseNumber, List<String> availableActions) {
         return new ProposalResponse(p.getId(), p.getProposalNumber(), p.getTitle(), p.getProjectType(), p.getStatus(),
                 p.getVersionNo(), p.getStateId(), p.getDistrictId(), p.getTalukaId(), p.getDepartmentId(),
                 p.getLengthKm(), p.getEstimatedLandAreaHa(), new TreeSet<>(p.getVillageIds()),
                 p.getAlignmentDescription(), p.getDescription(), p.getPlannedStartDate(), p.getPlannedEndDate(),
                 p.getOwnerUserId(), p.getSubmittedAt(), p.getCreatedAt(), p.getUpdatedAt(), projectCode,
-                availableActions);
+                acquisitionCaseNumber, availableActions);
+    }
+
+    public static ProposalResponse from(Proposal p, String projectCode, List<String> availableActions) {
+        return from(p, projectCode, null, availableActions);
     }
 }

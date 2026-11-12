@@ -41,6 +41,14 @@ import { LoginHistoryPage } from '../features/admin/users/LoginHistoryPage'
 import { RolesPage } from '../features/admin/users/RolesPage'
 import { UsersPage } from '../features/admin/users/UsersPage'
 import { RoadmapPage } from '../features/roadmap/RoadmapPage'
+import { DashboardPage } from '../features/monitoring/DashboardPage'
+import { ProjectMonitoringPage } from '../features/monitoring/ProjectMonitoringPage'
+import { NlamsPanel } from '../features/monitoring/NlamsPanel'
+import { GeographyMonitoringPage } from '../features/monitoring/GeographyMonitoringPage'
+import { LifecycleMonitoringPage } from '../features/monitoring/LifecycleMonitoringPage'
+import { CompensationMonitoringPage } from '../features/monitoring/CompensationMonitoringPage'
+import { MisReportsPage } from '../features/monitoring/MisReportsPage'
+import { SlaMonitoringPage } from '../features/monitoring/SlaMonitoringPage'
 import { PERMISSION, PROPOSAL_READ_ANY } from '../utils/permissions'
 
 export function AppRoutes() {
@@ -315,6 +323,78 @@ export function AppRoutes() {
           />
 
           <Route path="notifications" element={<NotificationListPage />} />
+
+          <Route
+            path="monitoring"
+            element={
+              <RequirePermission any={[PERMISSION.DASHBOARD_READ]}>
+                <DashboardPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/projects"
+            element={
+              <RequirePermission any={[PERMISSION.DASHBOARD_READ]}>
+                <ProjectMonitoringPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/nlams"
+            element={
+              <RequirePermission any={[PERMISSION.DASHBOARD_READ]}>
+                <NlamsPanel />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/geography"
+            element={
+              <RequirePermission any={[PERMISSION.DASHBOARD_READ]}>
+                <GeographyMonitoringPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/lifecycle"
+            element={
+              <RequirePermission any={[PERMISSION.DASHBOARD_READ]}>
+                <LifecycleMonitoringPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/compensation"
+            element={
+              <RequirePermission any={[PERMISSION.DASHBOARD_READ]}>
+                <CompensationMonitoringPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/reports"
+            element={
+              <RequirePermission any={[PERMISSION.REPORT_READ]}>
+                <MisReportsPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="monitoring/sla"
+            element={
+              <RequirePermission any={[PERMISSION.SLA_READ]}>
+                <SlaMonitoringPage />
+              </RequirePermission>
+            }
+          />
 
           <Route path="admin" element={<Navigate to="/admin/master/ministries" replace />} />
 

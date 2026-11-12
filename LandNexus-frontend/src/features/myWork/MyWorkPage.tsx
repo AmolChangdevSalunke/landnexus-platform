@@ -13,12 +13,19 @@ import {
 } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Card, CardHeader } from '../../components/ui/Card'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { ErrorState } from '../../components/ui/ErrorState'
 import { LinkButton } from '../../components/ui/LinkButton'
+import { Skeleton } from '../../components/ui/Skeleton'
+import { getMyTasks } from '../../api/proposals'
+import { useApiQuery } from '../../hooks/useApiQuery'
 import { ROADMAP_MODULES } from '../../app/roadmapModules'
 import { useAuth } from '../auth/useAuth'
 import { useDistrictCount } from '../auth/useDistrictCount'
 import { PERMISSION, PROPOSAL_READ_ANY } from '../../utils/permissions'
+import { formatArea, formatDateTime } from '../../utils/format'
 import { formatRole } from '../../utils/strings'
+import { ASSIGNMENT_STAGE_LABELS } from '../proposals/labels'
 
 const ScopeMap = lazy(() =>
   import('./ScopeMap').then((module) => ({ default: module.ScopeMap })),
@@ -34,13 +41,18 @@ interface QuickAction {
 export function MyWorkPage() {
   const { user, can, canAny } = useAuth()
   const districts = useDistrictCount()
+  const canReadProposals = canAny(...PROPOSAL_READ_ANY)
+
+  const tasksQuery = useApiQuery(
+    () => getMyTasks(0, 50),
+    [],
+    Boolean(user) && canReadProposals,
+  )
 
   if (!user) {
     return null
   }
-
   const displayName = user.fullName || user.username
-  const canReadProposals = canAny(...PROPOSAL_READ_ANY)
   const canCreateProposal = can(PERMISSION.PROPOSAL_CREATE)
   const canReadAdmin = can(PERMISSION.MASTER_DATA_READ)
   const canReadUsers = can(PERMISSION.USER_READ)
@@ -112,6 +124,98 @@ export function MyWorkPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight text-navy-900 sm:text-3xl">My work</h1>
+
+      {canReadProposals ? (
+        <Card className="p-5">
+          <CardHeader
+            title="My tasks"
+            description="Proposals assigned to you by automatic routing. Overdue tasks are marked in words as well as colour."
+            action={
+              <LinkButton to="/proposals" variant="outline" size="sm">
+                All proposals
+              </LinkButton>
+            }
+          />
+          <div className="mt-4">
+            {tasksQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : tasksQuery.error ? (
+              <ErrorState
+                title="Could not load your tasks"
+                message={tasksQuery.error.message}
+                onRetry={tasksQuery.reload}
+              />
+            ) : (tasksQuery.data?.content ?? []).length === 0 ? (
+              <EmptyState
+                title="No open tasks"
+                description="Scrutiny and decision assignments appear here when a proposal is routed to you."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                      <th scope="col" className="px-3 py-2 font-semibold">Proposal</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Stage</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Status</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Assigned</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Due</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(tasksQuery.data?.content ?? []).map((task) => (
+                      <tr key={task.assignmentId} className="border-b border-slate-100 last:border-0">
+                        <td className="px-3 py-2 align-top">
+                          <p className="font-semibold text-navy-900">
+                            {task.proposalNumber ?? task.title ?? 'Proposal'}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {task.title ?? 'No title'}
+                            {task.estimatedLandAreaHa != null
+                              ? ` · ${formatArea(task.estimatedLandAreaHa)}`
+                              : ''}
+                            {task.districtName ? ` · ${task.districtName}` : ''}
+                          </p>
+                        </td>
+                        <td className="px-3 py-2 align-top text-slate-700">
+                          {ASSIGNMENT_STAGE_LABELS[task.stage]}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          {task.overdue ? (
+                            <Badge variant="danger">Overdue</Badge>
+                          ) : task.assignmentStatus === 'IN_PROGRESS' ? (
+                            <Badge variant="info">In progress</Badge>
+                          ) : (
+                            <Badge variant="neutral">Pending</Badge>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 align-top text-slate-700">
+                          {formatDateTime(task.assignedAt)}
+                        </td>
+                        <td className="px-3 py-2 align-top text-slate-700">
+                          {task.dueAt ? formatDateTime(task.dueAt) : 'No due date'}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <Link
+                            to={`/proposals/${task.proposalId}`}
+                            className="font-semibold text-blue-700 hover:text-blue-800"
+                          >
+                            Open proposal
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="p-5 xl:col-span-2">

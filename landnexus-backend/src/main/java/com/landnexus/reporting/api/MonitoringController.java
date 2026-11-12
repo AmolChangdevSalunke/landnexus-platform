@@ -3,7 +3,9 @@ package com.landnexus.reporting.api;
 import com.landnexus.reporting.api.dto.MonitoringDtos.Dashboard;
 import com.landnexus.reporting.api.dto.MonitoringDtos.ReportInfo;
 import com.landnexus.reporting.api.dto.MonitoringDtos.ReportResult;
+import com.landnexus.reporting.api.dto.NlamsDtos.NlamsDashboard;
 import com.landnexus.reporting.application.DashboardService;
+import com.landnexus.reporting.application.NlamsMonitoringService;
 import com.landnexus.reporting.application.ReportService;
 import com.landnexus.shared.security.CurrentActor;
 import java.nio.charset.StandardCharsets;
@@ -24,10 +26,12 @@ public class MonitoringController {
 
     private final DashboardService dashboards;
     private final ReportService reports;
+    private final NlamsMonitoringService nlams;
 
-    public MonitoringController(DashboardService dashboards, ReportService reports) {
+    public MonitoringController(DashboardService dashboards, ReportService reports, NlamsMonitoringService nlams) {
         this.dashboards = dashboards;
         this.reports = reports;
+        this.nlams = nlams;
     }
 
     @PreAuthorize("hasAuthority('DASHBOARD_READ')")
@@ -35,6 +39,15 @@ public class MonitoringController {
     public Dashboard dashboard(@RequestParam(required = false) UUID stateId, @RequestParam(required = false) UUID districtId,
                                Authentication a) {
         return dashboards.dashboard(stateId, districtId, CurrentActor.from(a));
+    }
+
+    /** Real-time NLAMS progress. The frontend polls this every 30 seconds while the tab is visible. */
+    @PreAuthorize("hasAuthority('DASHBOARD_READ')")
+    @GetMapping("/nlams")
+    public NlamsDashboard nlams(@RequestParam(required = false) UUID stateId,
+                                @RequestParam(required = false) UUID districtId,
+                                Authentication a) {
+        return nlams.dashboard(stateId, districtId, CurrentActor.from(a));
     }
 
     @PreAuthorize("hasAuthority('REPORT_READ')")

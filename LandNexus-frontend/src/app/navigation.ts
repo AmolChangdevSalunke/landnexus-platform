@@ -1,11 +1,13 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  AlarmClock,
   AlertTriangle,
   BarChart3,
   Bell,
   ClipboardCheck,
   ClipboardList,
   Database,
+  FileSpreadsheet,
   FileText,
   Files,
   FolderKanban,
@@ -15,6 +17,7 @@ import {
   Map,
   MapPinned,
   PlusCircle,
+  Route,
   ScrollText,
   ShieldCheck,
   Users,
@@ -178,13 +181,32 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Roadmap',
+    label: 'Monitoring and MIS',
     items: [
       {
-        label: 'Monitoring and MIS',
-        to: '/roadmap/monitoring-mis',
+        label: 'Monitoring dashboard',
+        to: '/monitoring',
         icon: BarChart3,
-        planned: true,
+        permissions: [PERMISSION.DASHBOARD_READ],
+        end: true,
+      },
+      {
+        label: 'NLAMS progress',
+        to: '/monitoring/nlams',
+        icon: Route,
+        permissions: [PERMISSION.DASHBOARD_READ],
+      },
+      {
+        label: 'MIS reports',
+        to: '/monitoring/reports',
+        icon: FileSpreadsheet,
+        permissions: [PERMISSION.REPORT_READ],
+      },
+      {
+        label: 'SLA and alerts',
+        to: '/monitoring/sla',
+        icon: AlarmClock,
+        permissions: [PERMISSION.SLA_READ],
       },
     ],
   },

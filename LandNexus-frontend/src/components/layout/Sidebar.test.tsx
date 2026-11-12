@@ -86,15 +86,29 @@ describe('Sidebar navigation permissions', () => {
     expect(screen.queryByRole('link', { name: 'Acquisition cases' })).not.toBeInTheDocument()
   })
 
-  it('always keeps My work and marks remaining roadmap modules as planned', () => {
+  it('always keeps My work and hides monitoring links without permissions', () => {
     renderSidebar([])
 
     expect(screen.getByRole('link', { name: 'My work' })).toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: /Valuation and compensation/ }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Monitoring and MIS/ })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /Monitoring and MIS/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Monitoring dashboard' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'MIS reports' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'SLA and alerts' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Land records/ })).not.toBeInTheDocument()
-    expect(screen.getAllByText('Planned').length).toBeGreaterThan(0)
+  })
+
+  it('shows monitoring links based on their individual permissions', () => {
+    renderSidebar(['DASHBOARD_READ', 'REPORT_READ', 'SLA_READ'])
+
+    expect(screen.getByRole('link', { name: 'Monitoring dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'MIS reports' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'SLA and alerts' })).toBeInTheDocument()
   })
 })

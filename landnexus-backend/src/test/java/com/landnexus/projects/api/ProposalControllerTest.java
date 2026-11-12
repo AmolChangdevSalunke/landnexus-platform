@@ -60,7 +60,7 @@ class ProposalControllerTest {
         return new ProposalResponse(id, null, "State Highway", ProjectType.STATE_HIGHWAY, ProposalStatus.DRAFT, 0,
                 UUID.randomUUID(), UUID.randomUUID(), null, UUID.randomUUID(), new BigDecimal("60"),
                 new BigDecimal("150"), Set.of(UUID.randomUUID()), null, "desc", LocalDate.of(2027, 1, 1),
-                LocalDate.of(2028, 1, 1), UUID.randomUUID(), null, Instant.now(), Instant.now(), null,
+                LocalDate.of(2028, 1, 1), UUID.randomUUID(), null, Instant.now(), Instant.now(), null, null,
                 List.of("SUBMIT"));
     }
 

@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** A tiny local server plays the provider, so the adapter is tested without any real satellite service. */
 class ImageryServiceTest {
@@ -182,5 +184,63 @@ class ImageryServiceTest {
         assertThatThrownBy(() -> new ImageryConfig(true, "x", "https://example.org/wms", "l", "", "", "1.1.1", "image/png", "QUERY_PARAM", "token", "", "", 5, 100_000, false).validate())
                 .hasMessageContaining("SECRET");
         new ImageryConfig(false, "x", "", "", "", "", "1.1.1", "image/png", "NONE", "token", "", "", 5, 100_000, false).validate();
+    }
+
+    private static final String CAPS = """
+            <?xml version="1.0"?>
+            <!DOCTYPE WMT_MS_Capabilities SYSTEM "http://schemas.opengis.net/wms/1.1.1/WMS_MS_Capabilities.dtd">
+            <WMT_MS_Capabilities version="1.1.1"><Capability><Request><GetMap><Format>image/png</Format><Format>image/jpeg</Format></GetMap></Request>
+            <Layer><Title>Root</Title><SRS>EPSG:4326 EPSG:900913</SRS>
+              <Layer queryable="1"><Name>base:sat</Name><Title>Satellite</Title></Layer>
+              <Layer><Name>base:cadastre</Name><Title>Cadastral lines</Title></Layer>
+              <Layer><Title>Group without a name</Title></Layer>
+            </Layer></Capability></WMT_MS_Capabilities>
+            """;
+
+    @Test
+    void capabilities_listsLayersFormatsAndCrs_filtersThem_andSendsTheKeyButNeverReturnsIt() {
+        contentType.set("text/xml");
+        body.set(CAPS.strip().getBytes());
+
+        ImageryService.Capabilities all = service("QUERY_PARAM", "1.1.1").capabilities(null);
+
+        assertThat(all.layers()).extracting(ImageryService.LayerInfo::name).containsExactly("base:sat", "base:cadastre");
+        assertThat(all.layers().get(0).queryable()).isTrue();
+        assertThat(all.formats()).containsExactly("image/png", "image/jpeg");
+        assertThat(all.crs()).contains("EPSG:4326", "EPSG:900913");
+        assertThat(all.version()).isEqualTo("1.1.1");
+        assertThat(query.get()).contains("request=GetCapabilities", "token=" + SECRET);
+        assertThat(all.toString()).doesNotContain(SECRET).doesNotContain("127.0.0.1");
+        assertThat(service("NONE", "1.1.1").capabilities("cadastr").layers()).extracting(ImageryService.LayerInfo::name).containsExactly("base:cadastre");
+    }
+
+    @Test
+    void capabilities_neverReadsLocalFiles_fromAHostileDocument() throws Exception {
+        Path secret = Files.createTempFile("xxe", ".txt");
+        Files.writeString(secret, "XXE-SECRET");
+        try {
+            contentType.set("text/xml");
+            body.set(("<?xml version=\"1.0\"?><!DOCTYPE x [<!ENTITY e SYSTEM \"" + secret.toUri() + "\">]>"
+                    + "<WMS_Capabilities version=\"1.3.0\"><Layer><Name>l</Name><Title>&e;</Title></Layer></WMS_Capabilities>").getBytes());
+            String shown;
+            try {
+                shown = service("NONE", "1.3.0").capabilities(null).toString();
+            } catch (ImageryException e) {
+                shown = e.getMessage();
+            }
+            assertThat(shown).doesNotContain("XXE-SECRET");
+        } finally {
+            Files.deleteIfExists(secret);
+        }
+    }
+
+    @Test
+    void capabilities_refusesAnAnswerThatIsNotXml_andANotEnabledServer() {
+        contentType.set("image/png");
+        body.set(PNG);
+        assertThatThrownBy(() -> service("NONE", "1.1.1").capabilities(null)).hasMessageContaining("capabilities XML");
+
+        assertThatThrownBy(() -> new ImageryService(config(false, "NONE", "1.1.1", 100_000)).capabilities(null))
+                .isInstanceOfSatisfying(ImageryException.class, e -> assertThat(e.status()).isEqualTo(503));
     }
 }

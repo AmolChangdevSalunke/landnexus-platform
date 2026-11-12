@@ -56,7 +56,7 @@ class AcquisitionIntegrationTest {
     private MockMvc mockMvc;
     private String suffix, prefix, stateCode;
     private String district1, village1, village2;
-    private UUID projectId, field1Id, managerId;
+    private UUID projectId, secondProjectId, field1Id, managerId;
     private String manager, field1, field2, authority, consultant, finance;
 
     private static final Path STORAGE = newTempDir();
@@ -131,39 +131,56 @@ class AcquisitionIntegrationTest {
                 projectId, "PRJ-IT-" + suffix, proposalId, UUID.fromString(state), UUID.fromString(district1),
                 UUID.fromString(department), con, auth);
         jdbc.update("INSERT INTO project_villages (project_id, village_id) VALUES (?, ?)", projectId, UUID.fromString(village1));
+
+        // V16 allows exactly one acquisition case per project, so tests that need a second case use this
+        // separate project instead of creating a second case on the same project.
+        UUID secondProposalId = UUID.randomUUID();
+        secondProjectId = UUID.randomUUID();
+        jdbc.update("INSERT INTO proposals (id, proposal_number, title, project_type, status, version_no, state_id, district_id, "
+                        + "department_id, estimated_land_area_ha, description, planned_start_date, planned_end_date, owner_user_id, submitted_at) "
+                        + "VALUES (?, ?, 'DEMO IT proposal 2', 'STATE_HIGHWAY', 'APPROVED', 1, ?, ?, ?, 8, 'DEMO', DATE '2027-01-01', DATE '2028-01-01', ?, now())",
+                secondProposalId, "PRP-IT2-" + suffix, UUID.fromString(state), UUID.fromString(district1), UUID.fromString(department), con);
+        jdbc.update("INSERT INTO projects (id, code, proposal_id, title, project_type, status, state_id, district_id, department_id, "
+                        + "estimated_land_area_ha, owner_user_id, approved_by_user_id, approved_at) "
+                        + "VALUES (?, ?, ?, 'DEMO IT project 2', 'STATE_HIGHWAY', 'ACTIVE', ?, ?, ?, 8, ?, ?, now())",
+                secondProjectId, "PRJ-IT2-" + suffix, secondProposalId, UUID.fromString(state), UUID.fromString(district1),
+                UUID.fromString(department), con, auth);
+        jdbc.update("INSERT INTO project_villages (project_id, village_id) VALUES (?, ?)", secondProjectId, UUID.fromString(village1));
     }
 
     @AfterEach
     void cleanUp() {
         String like = prefix + "%";
         String owners = "(SELECT id FROM users WHERE username LIKE ?)";
-        String cases = "(SELECT id FROM acquisition_cases WHERE project_id = ?)";
-        try {
-            jdbc.execute("ALTER TABLE survey_photos DISABLE TRIGGER trg_survey_photos_append_only");
-            jdbc.update("DELETE FROM survey_photos WHERE survey_id IN (SELECT id FROM field_surveys WHERE case_id IN " + cases + ")", projectId);
-        } finally {
-            jdbc.execute("ALTER TABLE survey_photos ENABLE TRIGGER trg_survey_photos_append_only");
+        for (UUID pid : java.util.List.of(projectId, secondProjectId)) {
+            String cases = "(SELECT id FROM acquisition_cases WHERE project_id = ?)";
+            try {
+                jdbc.execute("ALTER TABLE survey_photos DISABLE TRIGGER trg_survey_photos_append_only");
+                jdbc.update("DELETE FROM survey_photos WHERE survey_id IN (SELECT id FROM field_surveys WHERE case_id IN " + cases + ")", pid);
+            } finally {
+                jdbc.execute("ALTER TABLE survey_photos ENABLE TRIGGER trg_survey_photos_append_only");
+            }
+            jdbc.update("DELETE FROM possession_records WHERE case_id IN " + cases, pid);
+            jdbc.update("DELETE FROM award_parcels WHERE award_id IN (SELECT id FROM acquisition_awards WHERE case_id IN " + cases + ")", pid);
+            jdbc.update("DELETE FROM acquisition_awards WHERE case_id IN " + cases, pid);
+            jdbc.update("DELETE FROM objections WHERE case_id IN " + cases, pid);
+            jdbc.update("DELETE FROM legal_notices WHERE case_id IN " + cases, pid);
+            jdbc.update("DELETE FROM field_surveys WHERE case_id IN " + cases, pid);
+            jdbc.update("DELETE FROM case_parcel_owners WHERE case_parcel_id IN (SELECT id FROM case_parcels WHERE case_id IN " + cases + ")", pid);
+            jdbc.update("DELETE FROM case_parcels WHERE case_id IN " + cases, pid);
+            jdbc.update("DELETE FROM case_villages WHERE case_id IN " + cases, pid);
+            try {
+                jdbc.execute("ALTER TABLE acquisition_case_history DISABLE TRIGGER trg_case_history_append_only");
+                jdbc.update("DELETE FROM acquisition_case_history WHERE case_id IN " + cases, pid);
+            } finally {
+                jdbc.execute("ALTER TABLE acquisition_case_history ENABLE TRIGGER trg_case_history_append_only");
+            }
+            jdbc.update("DELETE FROM acquisition_cases WHERE project_id = ?", pid);
         }
-        jdbc.update("DELETE FROM possession_records WHERE case_id IN " + cases, projectId);
-        jdbc.update("DELETE FROM award_parcels WHERE award_id IN (SELECT id FROM acquisition_awards WHERE case_id IN " + cases + ")", projectId);
-        jdbc.update("DELETE FROM acquisition_awards WHERE case_id IN " + cases, projectId);
-        jdbc.update("DELETE FROM objections WHERE case_id IN " + cases, projectId);
-        jdbc.update("DELETE FROM legal_notices WHERE case_id IN " + cases, projectId);
-        jdbc.update("DELETE FROM field_surveys WHERE case_id IN " + cases, projectId);
-        jdbc.update("DELETE FROM case_parcel_owners WHERE case_parcel_id IN (SELECT id FROM case_parcels WHERE case_id IN " + cases + ")", projectId);
-        jdbc.update("DELETE FROM case_parcels WHERE case_id IN " + cases, projectId);
-        jdbc.update("DELETE FROM case_villages WHERE case_id IN " + cases, projectId);
-        try {
-            jdbc.execute("ALTER TABLE acquisition_case_history DISABLE TRIGGER trg_case_history_append_only");
-            jdbc.update("DELETE FROM acquisition_case_history WHERE case_id IN " + cases, projectId);
-        } finally {
-            jdbc.execute("ALTER TABLE acquisition_case_history ENABLE TRIGGER trg_case_history_append_only");
-        }
-        jdbc.update("DELETE FROM acquisition_cases WHERE project_id = ?", projectId);
         jdbc.update("DELETE FROM notifications WHERE recipient_user_id IN " + owners, like);
-        jdbc.update("DELETE FROM project_villages WHERE project_id = ?", projectId);
-        jdbc.update("DELETE FROM projects WHERE id = ?", projectId);
-        jdbc.update("DELETE FROM proposals WHERE proposal_number = ?", "PRP-IT-" + suffix);
+        jdbc.update("DELETE FROM project_villages WHERE project_id IN (?, ?)", projectId, secondProjectId);
+        jdbc.update("DELETE FROM projects WHERE id IN (?, ?)", projectId, secondProjectId);
+        jdbc.update("DELETE FROM proposals WHERE proposal_number IN (?, ?)", "PRP-IT-" + suffix, "PRP-IT2-" + suffix);
         String parcels = "(SELECT p.id FROM land_parcels p JOIN districts d ON d.id = p.district_id JOIN states s ON s.id = d.state_id WHERE s.code = ?)";
         jdbc.update("DELETE FROM parcel_ownerships WHERE parcel_id IN " + parcels, stateCode);
         jdbc.update("DELETE FROM land_parcels WHERE id IN " + parcels, stateCode);
@@ -241,8 +258,8 @@ class AcquisitionIntegrationTest {
         return id(r);
     }
 
-    private String newCase() throws Exception {
-        MvcResult r = call(manager, "POST", ACQ + "/cases", "{\"projectId\":\"" + projectId + "\",\"framework\":\"LARR_2013\"}");
+    private String newCase(UUID project) throws Exception {
+        MvcResult r = call(manager, "POST", ACQ + "/cases", "{\"projectId\":\"" + project + "\",\"framework\":\"LARR_2013\"}");
         expect(r, 201);
         return id(r);
     }
@@ -274,7 +291,7 @@ class AcquisitionIntegrationTest {
         expect(cp, 201);
         String caseParcelId = id(cp);
         expect(call(manager, "POST", identify, "{\"parcelId\":\"" + p1 + "\",\"areaToAcquireHa\":1}"), 409);
-        String otherCase = newCase();
+        String otherCase = newCase(secondProjectId);
         expect(call(manager, "PUT", ACQ + "/cases/" + otherCase + "/villages", "{\"villageIds\":[\"" + village1 + "\"]}"), 200);
         expect(call(manager, "POST", ACQ + "/cases/" + otherCase + "/parcels", "{\"parcelId\":\"" + p1 + "\",\"areaToAcquireHa\":1}"), 409);
 
@@ -328,7 +345,7 @@ class AcquisitionIntegrationTest {
 
     @Test
     void lifecycle_surveyPhotos_notice_objection_award_possession_closure() throws Exception {
-        String caseId = newCase();
+        String caseId = newCase(projectId);
         String base = ACQ + "/cases/" + caseId;
         expect(call(manager, "PUT", base + "/villages", "{\"villageIds\":[\"" + village1 + "\"]}"), 200);
         String parcelId = parcel(village1, "DEMO-601", "2.0000");
@@ -419,7 +436,7 @@ class AcquisitionIntegrationTest {
         // closure frees the parcel for a later case
         expect(call(manager, "POST", base + "/close", null), 403);
         expect(call(authority, "POST", base + "/close", "{\"reason\":\"DEMO: acquisition completed\"}"), 200);
-        String second = newCase();
+        String second = newCase(secondProjectId);
         expect(call(manager, "PUT", ACQ + "/cases/" + second + "/villages", "{\"villageIds\":[\"" + village1 + "\"]}"), 200);
         expect(call(manager, "POST", ACQ + "/cases/" + second + "/parcels", "{\"parcelId\":\"" + parcelId + "\",\"areaToAcquireHa\":0.5}"), 201);
 

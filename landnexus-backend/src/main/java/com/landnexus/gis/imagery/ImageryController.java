@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.landnexus.gis.imagery.ImageryService.Capabilities;
 
 /** Satellite imagery through the server. The picture request needs the Authorization header, so the browser fetches it as a blob. */
 @RestController
@@ -67,5 +68,17 @@ public class ImageryController {
     @PostMapping("/test")
     public TestResult test() {
         return service.test();
+    }
+
+    /** Lists the layers the provider offers (for example to find the Bhuvan layer names). Administrators only. */
+    @PreAuthorize("hasAuthority('SETTINGS_MANAGE')")
+    @GetMapping("/capabilities")
+    public ResponseEntity<?> capabilities(@RequestParam(required = false) String filter) {
+        try {
+            return ResponseEntity.ok(service.capabilities(filter));
+        } catch (ImageryException e) {
+            return ResponseEntity.status(e.status()).contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("status", e.status(), "message", e.getMessage()));
+        }
     }
 }

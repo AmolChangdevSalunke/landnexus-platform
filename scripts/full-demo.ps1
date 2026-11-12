@@ -208,18 +208,18 @@ $proj = Invoke-Api GET "/projects?districtId=$($dist.Data.id)&size=50" $null $t.
 $projectId = (@($proj.Data.content) | Where-Object { $_.code -eq $projectCode } | Select-Object -First 1).id
 Assert "The approved project is found ($projectCode)" ($null -ne $projectId)
 $AQ = "/acquisition"
-$case = Invoke-Api POST "$AQ/cases" @{ projectId = $projectId; framework = "LARR_2013"; description = "DEMO acquisition" } $t.officer
-Check "Scrutiny officer opens an acquisition case" "OK" $case
+# Proposal approval now initiates the acquisition case automatically (V16: exactly one case per project).
+$caseList = Invoke-Api GET "$AQ/cases?projectId=$projectId&size=5" $null $t.officer
+Check "The approved project already has its acquisition case (auto-initiated)" "OK" $caseList
+Assert "Exactly one acquisition case exists for the project (V16)" (@($caseList.Data.content).Count -eq 1)
+$caseData = @($caseList.Data.content) | Select-Object -First 1
+$cid = $caseData.id
+Write-Host "    case number: $($caseData.caseNumber)"
 Check "A field officer cannot open a case" 403 (Invoke-Api POST "$AQ/cases" @{ projectId = $projectId; framework = "LARR_2013" } $t.field)
-$cid = $case.Data.id
-Write-Host "    case number: $($case.Data.caseNumber)"
 Check "Affected village chosen from the project's villages" "OK" (Invoke-Api PUT "$AQ/cases/$cid/villages" @{ villageIds = @($v1.Data.id) } $t.officer)
 $cp = Invoke-Api POST "$AQ/cases/$cid/parcels" @{ parcelId = $pid1; areaToAcquireHa = 1.0 } $t.officer
 Check "Parcel DEMO-101 identified (owners snapshotted)" "OK" $cp
 Write-Host "    owners in the snapshot: $(@($cp.Data.owners).Count)"
-$case2 = Invoke-Api POST "$AQ/cases" @{ projectId = $projectId; framework = "LARR_2013" } $t.officer
-Invoke-Api PUT "$AQ/cases/$($case2.Data.id)/villages" @{ villageIds = @($v1.Data.id) } $t.officer | Out-Null
-Check "The same parcel cannot join a second open case" 409 (Invoke-Api POST "$AQ/cases/$($case2.Data.id)/parcels" @{ parcelId = $pid1; areaToAcquireHa = 0.5 } $t.officer)
 $me = Invoke-Api GET "/auth/me" $null $t.field
 Check "Surveyor assigned" "OK" (Invoke-Api POST "$AQ/cases/$cid/parcels/$($cp.Data.id)/assign" @{ surveyorUserId = $me.Data.id } $t.officer)
 Check "Survey started" "OK" (Invoke-Api POST "$AQ/cases/$cid/start-survey" $null $t.officer)
@@ -511,6 +511,57 @@ Check "Administrator opens the system settings (read-only)" "OK" $set
 Write-Host "    payments: $($set.Data.paymentMode); uploads: $($set.Data.allowedUploadTypes -join ', ') up to $($set.Data.maxUploadMb) MB; export limit $($set.Data.exportMaxRows) rows; SLA scheduler enabled: $($set.Data.slaSchedulerEnabled)"
 Assert "Payments are SIMULATED in the settings" ($set.Data.paymentMode -eq "SIMULATED")
 Check "A scrutiny officer cannot open the system settings" 403 (Invoke-Api GET "$M/settings" $null $t.officer)
+
+# ---------------------------------------------------------------- Hardening: change password, one-time reset code, API catalogue
+Step "Hardening - change password (field officer) and a one-time reset code (scrutiny officer)"
+Update-Tokens
+$AUTH = "/auth"
+$newPw = "Changed-Passw0rd-$s"
+Check "A weak new password is refused" 400 (Invoke-Api POST "$AUTH/change-password" @{ currentPassword = $pw; newPassword = "short" } $t.field)
+Check "Field officer changes the password" "OK" (Invoke-Api POST "$AUTH/change-password" @{ currentPassword = $pw; newPassword = $newPw } $t.field)
+Check "The old password no longer works" 401 (Invoke-Api POST "/auth/login" @{ username = "demo-field-$s"; password = $pw } $null)
+$relog = Invoke-Api POST "/auth/login" @{ username = "demo-field-$s"; password = $newPw } $null
+Check "The new password works" "OK" $relog
+Check "Field officer changes it back (the printed demo accounts stay valid)" "OK" (Invoke-Api POST "$AUTH/change-password" @{ currentPassword = $newPw; newPassword = $pw } $relog.Data.accessToken)
+
+$officerId = (Invoke-Api GET "/auth/me" $null $t.officer).Data.id
+Check "A scrutiny officer cannot issue reset codes" 403 (Invoke-Api POST "/administration/users/$officerId/password-reset" $null $t.officer)
+$rc = Invoke-Api POST "/administration/users/$officerId/password-reset" $null $a
+Check "Administrator issues a one-time reset code for the scrutiny officer" "OK" $rc
+Write-Host "    code issued (not printed here), valid until $($rc.Data.expiresAt)"
+Check "The officer sets a new password with the code (no login needed)" "OK" (Invoke-Api POST "$AUTH/reset-password" @{ code = $rc.Data.code; newPassword = $newPw } $null)
+Check "The same code cannot be used twice" 400 (Invoke-Api POST "$AUTH/reset-password" @{ code = $rc.Data.code; newPassword = $newPw } $null)
+Check "The officer logs in with the new password" "OK" (Invoke-Api POST "/auth/login" @{ username = "demo-officer-$s"; password = $newPw } $null)
+$rc2 = Invoke-Api POST "/administration/users/$officerId/password-reset" $null $a
+Check "A second code puts the demo password back" "OK" (Invoke-Api POST "$AUTH/reset-password" @{ code = $rc2.Data.code; newPassword = $pw } $null)
+
+Step "Hardening - the API catalogue generated from the running code"
+$oa = Invoke-Api GET "/meta/openapi.json" $null $a
+Check "Administrator reads the OpenAPI document" "OK" $oa
+$pathCount = @($oa.Data.paths.PSObject.Properties).Count
+Write-Host "    $pathCount paths described; save them for your reporter with scripts\export-openapi.ps1"
+Assert "The catalogue lists the endpoints" ($pathCount -ge 60)
+Check "A scrutiny officer cannot read the API catalogue" 403 (Invoke-Api GET "/meta/openapi.json" $null $t.officer)
+
+# ---------------------------------------------------------------- Predictive timeline analytics and imagery
+Step "Predictive timeline analytics (statistical and explainable, not machine learning)"
+$fc = Invoke-Api GET "$M/forecast?districtId=$($dist.Data.id)" $null $t.authority
+Check "Competent authority opens the timeline forecast" "OK" $fc
+Write-Host "    method: $($fc.Data.method)"
+foreach ($st in @($fc.Data.stages)) { Write-Host ("      {0,-32} history {1,3}  median {2} h  p90 {3} h  waiting {4}  at risk {5}" -f $st.itemType, $st.samples, $st.medianHours, $st.p90Hours, $st.open, $st.atRisk) }
+foreach ($it in @($fc.Data.items) | Select-Object -First 5) { Write-Host ("      [{0}] {1} {2}: {3}" -f $it.risk, $it.title, $it.reference, $it.explanation) }
+Assert "The forecast says how it is made" ($fc.Data.method -eq "STATISTICAL_HISTORY" -and $fc.Data.methodNote -like "*not machine learning*")
+Assert "Every active stage is listed" (@($fc.Data.stages).Count -ge 6)
+Check "A consultant cannot see the forecast" 403 (Invoke-Api GET "$M/forecast" $null $t.consultant)
+
+Step "Satellite imagery connector (off until you have provider access)"
+$im = Invoke-Api GET "/gis/imagery/status" $null $t.field
+Check "Field officer reads the imagery status" "OK" $im
+Write-Host "    enabled: $($im.Data.enabled). $($im.Data.message)"
+$imTest = Invoke-Api POST "/gis/imagery/test" $null $a
+Check "Administrator runs the connection test" "OK" $imTest
+Write-Host "    test result: ok=$($imTest.Data.ok) - $($imTest.Data.message)"
+Check "A scrutiny officer cannot run the connection test" 403 (Invoke-Api POST "/gis/imagery/test" $null $t.officer)
 
 # ---------------------------------------------------------------- audit
 Step "Audit trail of the document (administrator)"

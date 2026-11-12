@@ -1,11 +1,15 @@
 package com.landnexus.projects.api;
 
+import com.landnexus.projects.api.dto.AssignmentDtos.AssignmentResponse;
+import com.landnexus.projects.api.dto.AssignmentDtos.MyTaskResponse;
 import com.landnexus.projects.api.dto.ProposalHistoryResponse;
 import com.landnexus.projects.api.dto.ProposalRequest;
 import com.landnexus.projects.api.dto.ProposalResponse;
+import com.landnexus.projects.api.dto.ProposalValidationResponse;
 import com.landnexus.projects.api.dto.ProposalVersionResponse;
 import com.landnexus.projects.api.dto.TransitionRequest;
 import com.landnexus.projects.application.ProposalService;
+import com.landnexus.projects.application.ProposalValidationService;
 import com.landnexus.projects.domain.ProposalStatus;
 import com.landnexus.projects.domain.ProposalWorkflow;
 import com.landnexus.shared.pagination.PageResponse;
@@ -79,6 +83,30 @@ public class ProposalController {
     @GetMapping("/{id}/versions")
     public List<ProposalVersionResponse> versions(@PathVariable UUID id, Authentication authentication) {
         return service.versions(id, CurrentActor.from(authentication));
+    }
+
+    @PreAuthorize(CAN_READ)
+    @GetMapping("/{id}/assignments")
+    public List<AssignmentResponse> assignments(@PathVariable UUID id, Authentication authentication) {
+        return service.assignments(id, CurrentActor.from(authentication));
+    }
+
+    @PreAuthorize(CAN_READ)
+    @GetMapping("/my-tasks")
+    public PageResponse<MyTaskResponse> myTasks(@RequestParam(defaultValue = "0") int page,
+                                                @RequestParam(defaultValue = "20") int size,
+                                                Authentication authentication) {
+        return service.myTasks(CurrentActor.from(authentication), page, size);
+    }
+
+    @PreAuthorize(CAN_READ)
+    @GetMapping("/{id}/validation")
+    public ProposalValidationResponse validation(@PathVariable UUID id, Authentication authentication) {
+        ProposalValidationService.ValidationResult result = service.validate(id, CurrentActor.from(authentication));
+        return new ProposalValidationResponse(id, result.passed(),
+                result.items().stream()
+                        .map(i -> new ProposalValidationResponse.Item(i.code(), i.severity(), i.message()))
+                        .toList());
     }
 
     @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
