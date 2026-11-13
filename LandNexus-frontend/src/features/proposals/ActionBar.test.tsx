@@ -169,6 +169,57 @@ describe('ActionBar', () => {
     expect(receivedBody).toEqual({ reason: 'Please attach the land schedule.' })
   })
 
+  it('requires a reason to reopen a rejected proposal and preserves the backend result', async () => {
+    const user = userEvent.setup()
+    const proposal = makeProposal({ status: 'REJECTED', availableActions: ['REOPEN'] })
+    const updated = makeProposal({ status: 'DRAFT', availableActions: ['SUBMIT'] })
+    const onUpdated = vi.fn()
+    let receivedBody: unknown = null
+
+    server.use(
+      http.post(
+        `${API_BASE_URL}/projects/proposals/${proposal.id}/reopen`,
+        async ({ request }) => {
+          receivedBody = await request.json()
+          return HttpResponse.json(updated)
+        },
+      ),
+    )
+
+    renderWithProviders(
+      <ActionBar proposal={proposal} onUpdated={onUpdated} onReload={vi.fn()} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Reopen for revision' }))
+    const dialog = screen.getByRole('dialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Reopen for revision' })
+    expect(confirm).toBeDisabled()
+    expect(within(dialog).getByText(/keeps its number/i)).toBeInTheDocument()
+
+    await user.type(
+      within(dialog).getByLabelText('Reason (required)'),
+      'Corrected survey numbers are available.',
+    )
+    expect(confirm).toBeEnabled()
+    await user.click(confirm)
+
+    await waitFor(() => expect(receivedBody).not.toBeNull())
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(updated))
+    expect(receivedBody).toEqual({ reason: 'Corrected survey numbers are available.' })
+  })
+
+  it('explains that a rejected proposal can be reopened by its owner', () => {
+    renderWithProviders(
+      <ActionBar
+        proposal={makeProposal({ status: 'REJECTED', availableActions: [] })}
+        onUpdated={vi.fn()}
+        onReload={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/owner can reopen it for revision/i)).toBeInTheDocument()
+  })
+
   it('reloads instead of guessing when the backend returns 409', async () => {
     const user = userEvent.setup()
     const proposal = makeProposal({ availableActions: ['START_SCRUTINY'] })

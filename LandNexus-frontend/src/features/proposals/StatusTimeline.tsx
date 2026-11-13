@@ -106,7 +106,7 @@ export function StatusTimeline({ status }: { status: ProposalStatus }) {
             <span aria-hidden="true" className="text-slate-400">
               →
             </span>
-            <span>final outcome from scrutiny or after recommendation</span>
+            <span>outcome from scrutiny or after recommendation; the owner may reopen it</span>
             {status === 'REJECTED' ? (
               <span className="rounded bg-danger-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
                 Current

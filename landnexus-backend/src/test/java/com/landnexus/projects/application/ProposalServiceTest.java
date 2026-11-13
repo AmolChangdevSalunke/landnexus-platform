@@ -490,6 +490,84 @@ class ProposalServiceTest {
         assertThatThrownBy(() -> service.reject(proposalId, "no", officer)).isInstanceOf(InvalidTransitionException.class);
     }
 
+    @Test
+    void reopen_byOwner_returnsToDraft_keepingNumberVersionsAndHistory() {
+        Proposal p = stored(ProposalStatus.REJECTED);
+        p.setProposalNumber("PRP-2026-000007");
+        p.setVersionNo(2);
+        p.setSubmittedAt(NOW);
+        when(projects.findByProposalId(proposalId)).thenReturn(Optional.empty());
+
+        ProposalResponse response = service.transition(proposalId, ProposalWorkflow.REOPEN,
+                "New survey numbers are available", consultant);
+
+        assertThat(response.status()).isEqualTo(ProposalStatus.DRAFT);
+        assertThat(response.proposalNumber()).isEqualTo("PRP-2026-000007");
+        assertThat(response.versionNo()).isEqualTo(2);
+        assertThat(p.getSubmittedAt()).isEqualTo(NOW);
+        ArgumentCaptor<ProposalStatusHistory> entry = ArgumentCaptor.forClass(ProposalStatusHistory.class);
+        verify(history).save(entry.capture());
+        assertThat(entry.getValue().getFromStatus()).isEqualTo(ProposalStatus.REJECTED);
+        assertThat(entry.getValue().getToStatus()).isEqualTo(ProposalStatus.DRAFT);
+        assertThat(entry.getValue().getAction()).isEqualTo(ProposalWorkflow.REOPEN);
+        assertThat(entry.getValue().getReason()).isEqualTo("New survey numbers are available");
+        verify(audit).record(eq("REOPEN"), eq("Proposal"), eq(proposalId), anyString());
+        verify(notifications).notify(eq(ownerId), anyString(), anyString(), anyString(), eq("Proposal"), eq(proposalId));
+        verify(versions, never()).save(any());
+        verify(proposals, never()).nextNumber();
+        verify(projects, never()).saveAndFlush(any());
+        verify(acquisitionCaseInitiator, never()).initiateForApprovedProject(any(), any(), any());
+    }
+
+    @Test
+    void reopen_byAnotherConsultant_isForbidden() {
+        stored(ProposalStatus.REJECTED);
+
+        assertThatThrownBy(() -> service.transition(proposalId, ProposalWorkflow.REOPEN, "reason", otherConsultant))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("created the proposal");
+    }
+
+    @Test
+    void reopen_withoutAReason_isRejected() {
+        stored(ProposalStatus.REJECTED);
+
+        assertThatThrownBy(() -> service.transition(proposalId, ProposalWorkflow.REOPEN, " ", consultant))
+                .isInstanceOf(InvalidRequestException.class);
+        verify(history, never()).save(any(ProposalStatusHistory.class));
+    }
+
+    @Test
+    void reopen_aDraft_isAnInvalidTransition() {
+        stored(ProposalStatus.DRAFT);
+
+        assertThatThrownBy(() -> service.transition(proposalId, ProposalWorkflow.REOPEN, "reason", consultant))
+                .isInstanceOf(InvalidTransitionException.class);
+    }
+
+    @Test
+    void reopen_aProposalThatAlreadyHasAProject_isRejected() {
+        stored(ProposalStatus.REJECTED);
+        when(projects.findByProposalId(proposalId)).thenReturn(Optional.of(new Project()));
+
+        assertThatThrownBy(() -> service.transition(proposalId, ProposalWorkflow.REOPEN, "retry", consultant))
+                .isInstanceOf(InvalidTransitionException.class)
+                .hasMessageContaining("already has a project");
+        verify(history, never()).save(any(ProposalStatusHistory.class));
+        verify(notifications, never()).notify(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void get_aRejectedProposal_offersReopenOnlyToItsOwner() {
+        stored(ProposalStatus.REJECTED);
+
+        assertThat(service.get(proposalId, consultant).availableActions())
+                .containsExactly(ProposalWorkflow.REOPEN);
+        assertThat(service.get(proposalId, otherConsultant).availableActions()).isEmpty();
+        assertThat(service.get(proposalId, officer).availableActions()).isEmpty();
+        assertThat(service.get(proposalId, authority).availableActions()).isEmpty();
+    }
+
     // ------------------------------------------------------------------ queries
 
     @Test

@@ -99,6 +99,7 @@ const ACTION_ENDPOINTS: Record<ProposalAction, string> = {
   REJECT_SCRUTINY: 'reject',
   APPROVE: 'approve',
   REJECT: 'reject',
+  REOPEN: 'reopen',
 }
 
 /**

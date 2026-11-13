@@ -77,6 +77,7 @@ const HISTORY_ACTION_LABELS: Record<string, string> = {
   APPROVE: 'Approved',
   REJECT_SCRUTINY: 'Rejected at scrutiny',
   REJECT: 'Rejected',
+  REOPEN: 'Reopened for revision',
   UPDATE: 'Draft updated',
 }
 
@@ -151,7 +152,7 @@ export const PROPOSAL_ACTION_META: Record<ProposalAction, ProposalActionMeta> = 
     variant: 'danger',
     dialogTitle: 'Reject this proposal?',
     dialogDescription:
-      'Rejection is final. The reason is recorded in the proposal history and the consultant is notified.',
+      'The reason is recorded in the proposal history and the consultant is notified. The owner can reopen the proposal later with a new reason.',
     confirmLabel: 'Reject',
   },
   APPROVE: {
@@ -169,8 +170,17 @@ export const PROPOSAL_ACTION_META: Record<ProposalAction, ProposalActionMeta> = 
     variant: 'danger',
     dialogTitle: 'Reject this proposal?',
     dialogDescription:
-      'Rejection is final. The reason is recorded in the proposal history and the consultant is notified.',
+      'The reason is recorded in the proposal history and the consultant is notified. The owner can reopen the proposal later with a new reason.',
     confirmLabel: 'Reject',
+  },
+  REOPEN: {
+    label: 'Reopen for revision',
+    reason: 'required',
+    variant: 'secondary',
+    dialogTitle: 'Reopen this rejected proposal?',
+    dialogDescription:
+      'The proposal returns to draft for editing. It keeps its number, earlier versions and full history; resubmitting creates a new version. No project or acquisition case is created.',
+    confirmLabel: 'Reopen for revision',
   },
 }
 
@@ -194,6 +204,8 @@ export function actionSuccessMessage(action: ProposalAction, projectCode: string
         : 'Proposal approved. A project was created.'
     case 'REJECT':
       return 'Proposal rejected.'
+    case 'REOPEN':
+      return 'Proposal reopened for revision. It keeps its number and earlier versions.'
   }
 }
 
@@ -212,7 +224,7 @@ export function noActionMessage(status: ProposalStatus): string {
     case 'APPROVED':
       return 'This proposal is approved. It is final.'
     case 'REJECTED':
-      return 'This proposal is rejected. It is final.'
+      return 'This proposal is rejected. Its owner can reopen it for revision with a reason.'
   }
 }
 

@@ -12,6 +12,7 @@ import java.util.Set;
  * UNDER_SCRUTINY -REQUEST_CLARIFICATION-> CLARIFICATION_REQUESTED -RESUBMIT-> SUBMITTED
  * UNDER_SCRUTINY -RECOMMEND-> RECOMMENDED -APPROVE-> APPROVED (a project is created)
  * UNDER_SCRUTINY -REJECT_SCRUTINY-> REJECTED   and   RECOMMENDED -REJECT-> REJECTED
+ * REJECTED -REOPEN-> DRAFT (only the owner; the proposal number, versions and history are kept)
  */
 public final class ProposalWorkflow {
 
@@ -23,13 +24,14 @@ public final class ProposalWorkflow {
     public static final String REJECT_SCRUTINY = "REJECT_SCRUTINY";
     public static final String APPROVE = "APPROVE";
     public static final String REJECT = "REJECT";
+    public static final String REOPEN = "REOPEN";
 
     public static final String PERMISSION_CREATE = "PROPOSAL_CREATE";
     public static final String PERMISSION_SCRUTINIZE = "PROPOSAL_SCRUTINIZE";
     public static final String PERMISSION_DECIDE = "PROPOSAL_DECIDE";
 
     /** Only the consultant who owns the proposal may do these. */
-    public static final Set<String> OWNER_ACTIONS = Set.of(SUBMIT, RESUBMIT);
+    public static final Set<String> OWNER_ACTIONS = Set.of(SUBMIT, RESUBMIT, REOPEN);
 
     /** Nobody may review (scrutinise or decide) their own proposal. */
     public static final Set<String> REVIEWER_ACTIONS =
@@ -47,7 +49,8 @@ public final class ProposalWorkflow {
             t(ProposalStatus.UNDER_SCRUTINY, RECOMMEND, ProposalStatus.RECOMMENDED, PERMISSION_SCRUTINIZE, false),
             t(ProposalStatus.UNDER_SCRUTINY, REJECT_SCRUTINY, ProposalStatus.REJECTED, PERMISSION_SCRUTINIZE, true),
             t(ProposalStatus.RECOMMENDED, APPROVE, ProposalStatus.APPROVED, PERMISSION_DECIDE, false),
-            t(ProposalStatus.RECOMMENDED, REJECT, ProposalStatus.REJECTED, PERMISSION_DECIDE, true)));
+            t(ProposalStatus.RECOMMENDED, REJECT, ProposalStatus.REJECTED, PERMISSION_DECIDE, true),
+            t(ProposalStatus.REJECTED, REOPEN, ProposalStatus.DRAFT, PERMISSION_CREATE, true)));
 
     private ProposalWorkflow() {
     }

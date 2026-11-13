@@ -123,7 +123,8 @@ export function NlamsStageStepper({
 
       {rejected ? (
         <p className="rounded-md border border-danger-100 bg-danger-50 px-3 py-2 text-sm text-danger-700">
-          This proposal was rejected. The workflow ends here; the reason is recorded in the history below.
+          This proposal was rejected. The workflow stops here until its owner reopens it for revision;
+          the reason is recorded in the history below.
         </p>
       ) : null}
 

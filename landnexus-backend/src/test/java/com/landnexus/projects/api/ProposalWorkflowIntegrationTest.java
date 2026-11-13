@@ -341,7 +341,7 @@ class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest 
     }
 
     @Test
-    void rejection_needsAReason_andIsFinal() throws Exception {
+    void rejection_needsAReason_andTheOwnerCanReopenWithoutLosingTheNumber() throws Exception {
         String id = createProposal(consultantToken);
         expect(act(consultantToken, id, "submit", null), 200);
         expect(act(officerToken, id, "start-scrutiny", null), 200);
@@ -351,7 +351,30 @@ class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest 
         expect(act(officerToken, id, "recommend", null), 409);
         mockMvc.perform(get(PROPOSALS + "/" + id).header("Authorization", consultantToken))
                 .andExpect(jsonPath("$.status").value("REJECTED"))
-                .andExpect(jsonPath("$.availableActions.length()").value(0));
+                .andExpect(jsonPath("$.availableActions.length()").value(1))
+                .andExpect(jsonPath("$.availableActions[0]").value("REOPEN"));
+
+        // Another consultant cannot see the proposal at all; the owner must give a reason.
+        expect(act(consultant2Token, id, "reopen", "{\"reason\":\"retry\"}"), 404);
+        expect(act(consultantToken, id, "reopen", "{\"reason\":\"\"}"), 400);
+
+        MvcResult reopened = act(consultantToken, id, "reopen", "{\"reason\":\"New survey numbers\"}");
+        expect(reopened, 200);
+        String number = JsonPath.read(reopened.getResponse().getContentAsString(), "$.proposalNumber");
+        assertThat(number).startsWith("PRP-");
+
+        mockMvc.perform(get(PROPOSALS + "/" + id).header("Authorization", consultantToken))
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.proposalNumber").value(number))
+                .andExpect(jsonPath("$.versionNo").value(1))
+                .andExpect(jsonPath("$.availableActions[0]").value("SUBMIT"));
+
+        expect(act(consultantToken, id, "submit", null), 200);
+        mockMvc.perform(get(PROPOSALS + "/" + id + "/history").header("Authorization", consultantToken))
+                .andExpect(jsonPath("$[?(@.action == 'REOPEN')].reason").value("New survey numbers"));
+        mockMvc.perform(get(PROPOSALS + "/" + id).header("Authorization", consultantToken))
+                .andExpect(jsonPath("$.proposalNumber").value(number))
+                .andExpect(jsonPath("$.versionNo").value(2));
     }
 
     @Test

@@ -121,6 +121,15 @@ public class ProposalController {
         return service.transition(id, ProposalWorkflow.RESUBMIT, null, CurrentActor.from(authentication));
     }
 
+    /** Reopens a rejected proposal for its owner. The number, versions and history are preserved. */
+    @PreAuthorize("hasAuthority('PROPOSAL_CREATE')")
+    @PostMapping("/{id}/reopen")
+    public ProposalResponse reopen(@PathVariable UUID id, @Valid @RequestBody TransitionRequest request,
+                                   Authentication authentication) {
+        return service.transition(id, ProposalWorkflow.REOPEN, request.reason(),
+                CurrentActor.from(authentication));
+    }
+
     @PreAuthorize("hasAuthority('PROPOSAL_SCRUTINIZE')")
     @PostMapping("/{id}/start-scrutiny")
     public ProposalResponse startScrutiny(@PathVariable UUID id, Authentication authentication) {

@@ -330,6 +330,13 @@ public class ProposalService {
                 throw new AccessDeniedException(denial);
             }
 
+            // Reopening only returns a rejected proposal to editing. A proposal that already
+            // produced a project must never be reopened: that would fork an approved outcome.
+            if (ProposalWorkflow.REOPEN.equals(action) && projects.findByProposalId(proposal.getId()).isPresent()) {
+                throw new InvalidTransitionException(
+                        "This proposal already has a project and cannot be reopened");
+            }
+
             boolean submitting = ProposalWorkflow.SUBMIT.equals(action)
                     || ProposalWorkflow.RESUBMIT.equals(action);
             if (submitting) {
@@ -567,6 +574,14 @@ public class ProposalService {
                 }
                 msg += " See the history for the full record.";
                 notifyUser(proposal.getOwnerUserId(), id, "Proposal rejected", msg);
+            }
+            case ProposalWorkflow.REOPEN -> {
+                String msg = "Proposal " + label + " was reopened for editing.";
+                if (reason != null && !reason.isBlank()) {
+                    msg += " Reason: " + (reason.length() > 400 ? reason.substring(0, 400) + "..." : reason);
+                }
+                msg += " It keeps its number and earlier versions; resubmitting creates a new version.";
+                notifyUser(proposal.getOwnerUserId(), id, "Proposal reopened", msg);
             }
             default -> {
             }

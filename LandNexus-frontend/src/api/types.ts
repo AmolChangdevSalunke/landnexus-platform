@@ -266,6 +266,7 @@ export type ProposalAction =
   | 'REJECT_SCRUTINY'
   | 'APPROVE'
   | 'REJECT'
+  | 'REOPEN'
 
 export interface ProposalRequest {
   title: string
