@@ -8,6 +8,11 @@ const dateFormatter = new Intl.DateTimeFormat('en-IN', {
   dateStyle: 'medium',
 })
 
+const timeFormatter = new Intl.DateTimeFormat('en-IN', {
+  timeStyle: 'medium',
+  hour12: false,
+})
+
 const numberFormatter = new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 2,
 })
@@ -30,6 +35,12 @@ export function formatDateTime(value: string | null | undefined): string {
 export function formatDate(value: string | null | undefined): string {
   const date = parse(value)
   return date ? dateFormatter.format(date) : '—'
+}
+
+/** Time only, HH:mm:ss in the user's locale (en-IN 24-hour format). */
+export function formatTime(value: string | null | undefined): string {
+  const date = parse(value)
+  return date ? timeFormatter.format(date) : '—'
 }
 
 /** Exact ISO timestamp for tooltips and detail views. */

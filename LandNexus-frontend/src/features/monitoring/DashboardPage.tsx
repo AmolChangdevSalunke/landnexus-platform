@@ -17,6 +17,7 @@ import type { Dashboard, DistrictRow } from '../../api/types'
 import { getDashboard } from '../../api/monitoring'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { DataTable, type TableColumn } from '../../components/ui/DataTable'
@@ -25,11 +26,14 @@ import { LinkButton } from '../../components/ui/LinkButton'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useApiQuery } from '../../hooks/useApiQuery'
 import { usePagination } from '../../hooks/usePagination'
+import { POLL_INTERVAL_MS, useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { PERMISSION } from '../../utils/permissions'
 import {
   formatArea,
+  formatDateTime,
   formatMoney,
   formatNumber,
+  formatTime,
 } from '../../utils/format'
 import { NoAccessPage } from '../auth/NoAccessPage'
 import { useAuth } from '../auth/useAuth'
@@ -66,6 +70,9 @@ export function DashboardPage() {
     [scope.stateId, scope.districtId],
     canRead,
   )
+
+  // Keep the overview fresh without polling when the tab is hidden.
+  useVisibilityPolling(reload, POLL_INTERVAL_MS, canRead)
 
   if (!canRead) {
     return <NoAccessPage />
@@ -104,7 +111,28 @@ export function DashboardPage() {
           <ErrorState message={error.message} onRetry={reload} />
         </Card>
       ) : data ? (
-        <DashboardBody data={data} onSelectDistrict={scope.selectDistrict} />
+        <>
+          {error ? (
+            <Alert variant="error" title="Could not refresh the dashboard" className="mb-4">
+              {error.message} Showing the last successful refresh.
+            </Alert>
+          ) : null}
+
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+            <Badge variant="info">Auto-refreshes every 30 seconds</Badge>
+            <span>
+              Updated at{' '}
+              <span
+                className="font-semibold text-slate-700"
+                title={formatDateTime(data.generatedAt)}
+              >
+                {formatTime(data.generatedAt)}
+              </span>
+            </span>
+          </div>
+
+          <DashboardBody data={data} onSelectDistrict={scope.selectDistrict} />
+        </>
       ) : null}
     </div>
   )

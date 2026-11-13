@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { DashboardPage } from './DashboardPage'
@@ -91,6 +91,92 @@ describe('Monitoring dashboard', () => {
     const districtTable = screen.getByRole('table', { name: /district activity/i })
     expect(within(districtTable).getByText('Pune')).toBeInTheDocument()
     expect(within(districtTable).getByText('Nagpur')).toBeInTheDocument()
+  })
+
+  it('refreshes every 30 seconds while the tab is visible', async () => {
+    let calls = 0
+    server.use(
+      http.get(`${API_BASE_URL}/monitoring/dashboard`, () => {
+        calls += 1
+        return HttpResponse.json(DASHBOARD_FIXTURE)
+      }),
+    )
+
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    try {
+      renderWithProviders(<DashboardPage />, { auth: DASHBOARD_AUTH })
+
+      expect(await screen.findByText('Total projects')).toBeInTheDocument()
+      await waitFor(() => expect(calls).toBe(1))
+
+      act(() => {
+        vi.advanceTimersByTime(30_000)
+      })
+      await waitFor(() => expect(calls).toBe(2))
+
+      act(() => {
+        vi.advanceTimersByTime(30_000)
+      })
+      await waitFor(() => expect(calls).toBe(3))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows the last successful refresh time as HH:mm:ss', async () => {
+    renderWithProviders(<DashboardPage />, { auth: DASHBOARD_AUTH })
+
+    expect(await screen.findByText('Total projects')).toBeInTheDocument()
+    expect(screen.getByText(/Updated at/)).toHaveTextContent(/\d{2}:\d{2}:\d{2}/)
+  })
+
+  it('keeps the last successful data visible when a refresh fails', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<DashboardPage />, { auth: DASHBOARD_AUTH })
+
+    expect(await screen.findByText('Total projects')).toBeInTheDocument()
+
+    server.use(
+      http.get(`${API_BASE_URL}/monitoring/dashboard`, () =>
+        HttpResponse.json(
+          {
+            timestamp: new Date().toISOString(),
+            status: 500,
+            error: 'Internal Server Error',
+            message: 'Dashboard refresh failed',
+            path: '/api/v1/monitoring/dashboard',
+            fieldErrors: [],
+          },
+          { status: 500 },
+        ),
+      ),
+    )
+
+    await user.click(screen.getByRole('button', { name: /^refresh$/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/could not refresh the dashboard/i)
+    expect(alert).toHaveTextContent(/last successful refresh/i)
+    expect(screen.getByText('Total projects')).toBeInTheDocument()
+    expect(screen.getByText('Total proposals')).toBeInTheDocument()
+  })
+
+  it('refreshes manually when Refresh is clicked', async () => {
+    const user = userEvent.setup()
+    let calls = 0
+    server.use(
+      http.get(`${API_BASE_URL}/monitoring/dashboard`, () => {
+        calls += 1
+        return HttpResponse.json(DASHBOARD_FIXTURE)
+      }),
+    )
+
+    renderWithProviders(<DashboardPage />, { auth: DASHBOARD_AUTH })
+    expect(await screen.findByText('Total projects')).toBeInTheDocument()
+    await waitFor(() => expect(calls).toBe(1))
+
+    await user.click(screen.getByRole('button', { name: /^refresh$/i }))
+    await waitFor(() => expect(calls).toBe(2))
   })
 
   it('labels simulated payments and never presents them as real money', async () => {
@@ -341,6 +427,7 @@ describe('NLAMS progress', () => {
     expect(screen.getByText(/SIMULATED PAYMENT/i)).toBeInTheDocument()
     expect(screen.getByText(/no real money moved/i)).toBeInTheDocument()
     expect(screen.getByText(/Updated at/i)).toBeInTheDocument()
+    expect(screen.getByText(/Updated at/i)).toHaveTextContent(/\d{2}:\d{2}:\d{2}/)
     expect(screen.getByText(/Auto-refreshes every 30 seconds/i)).toBeInTheDocument()
   })
 

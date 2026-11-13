@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import {
   Banknote,
   ClipboardCheck,
@@ -10,21 +9,28 @@ import {
 import type { NlamsProject } from '../../api/types'
 import { getNlams } from '../../api/monitoring'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useApiQuery } from '../../hooks/useApiQuery'
-import { formatArea, formatDateTime, formatMoney, formatNumber, formatPercent } from '../../utils/format'
+import { useVisibilityPolling } from '../../hooks/useVisibilityPolling'
+import {
+  formatArea,
+  formatDateTime,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatTime,
+} from '../../utils/format'
 import { PROJECT_TYPE_LABELS } from '../proposals/labels'
 import { KpiCard, KpiGrid } from './KpiCard'
 import { MonitoringFilters, ScopeSummary } from './MonitoringFilters'
 import { MonitoringTabs } from './MonitoringTabs'
 import { SimulationBanner } from './SimulationBanner'
 import { useMonitoringScope } from './scope'
-
-const POLL_MS = 30_000
 
 const STAGE_ORDER = [
   'Project approved',
@@ -47,15 +53,8 @@ export function NlamsPanel() {
     [scope.stateId, scope.districtId],
   )
 
-  // Poll only while this tab is visible, so a background tab does not keep hitting the API.
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        reload()
-      }
-    }, POLL_MS)
-    return () => window.clearInterval(timer)
-  }, [reload])
+  // Refresh every 30 seconds, but only while this tab is visible.
+  useVisibilityPolling(reload)
 
   return (
     <div className="space-y-5">
@@ -88,11 +87,22 @@ export function NlamsPanel() {
         </Card>
       ) : data ? (
         <>
+          {error ? (
+            <Alert variant="error" title="Could not refresh NLAMS progress" className="mb-4">
+              {error.message} Showing the last successful refresh.
+            </Alert>
+          ) : null}
+
           <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
             <Badge variant="info">Auto-refreshes every 30 seconds</Badge>
             <span>
               Updated at{' '}
-              <span className="font-semibold text-slate-700">{formatDateTime(data.generatedAt)}</span>
+              <span
+                className="font-semibold text-slate-700"
+                title={formatDateTime(data.generatedAt)}
+              >
+                {formatTime(data.generatedAt)}
+              </span>
             </span>
             {scope.hasScope ? (
               <button
