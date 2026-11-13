@@ -49,6 +49,7 @@ import { LifecycleMonitoringPage } from '../features/monitoring/LifecycleMonitor
 import { CompensationMonitoringPage } from '../features/monitoring/CompensationMonitoringPage'
 import { MisReportsPage } from '../features/monitoring/MisReportsPage'
 import { SlaMonitoringPage } from '../features/monitoring/SlaMonitoringPage'
+import { DEFAULT_ROADMAP_KEY } from './roadmapModules'
 import { PERMISSION, PROPOSAL_READ_ANY } from '../utils/permissions'
 
 export function AppRoutes() {
@@ -447,7 +448,15 @@ export function AppRoutes() {
           <Route path="403" element={<NoAccessPage />} />
           <Route
             path="roadmap"
-            element={<Navigate to="/roadmap/valuation-compensation" replace />}
+            element={<Navigate to={`/roadmap/${DEFAULT_ROADMAP_KEY}`} replace />}
+          />
+          <Route
+            path="roadmap/valuation-compensation"
+            element={<Navigate to="/monitoring/compensation" replace />}
+          />
+          <Route
+            path="roadmap/monitoring-mis"
+            element={<Navigate to="/monitoring/reports" replace />}
           />
           <Route path="roadmap/gis" element={<Navigate to="/gis" replace />} />
           <Route path="roadmap/:module" element={<RoadmapPage />} />

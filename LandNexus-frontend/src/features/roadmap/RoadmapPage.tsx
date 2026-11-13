@@ -31,12 +31,12 @@ export function RoadmapPage() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-navy-900">
-              This module is planned and not available yet
+              This capability is planned and not available yet
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-              LandNexus is currently delivering Administration and Security, Government
-              Projects, and their workflows. This roadmap screen deliberately shows no data,
-              charts or counts.
+              This roadmap screen deliberately shows no data, charts or counts. The
+              implemented modules — proposals, projects, acquisition, compensation, land
+              records, GIS, monitoring and notifications — remain available from My work.
             </p>
           </div>
         </div>

@@ -19,7 +19,7 @@ import { LinkButton } from '../../components/ui/LinkButton'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { getMyTasks } from '../../api/proposals'
 import { useApiQuery } from '../../hooks/useApiQuery'
-import { ROADMAP_MODULES } from '../../app/roadmapModules'
+import { IMPLEMENTED_MODULES, ROADMAP_MODULES } from '../../app/roadmapModules'
 import { useAuth } from '../auth/useAuth'
 import { useDistrictCount } from '../auth/useDistrictCount'
 import { PERMISSION, PROPOSAL_READ_ANY } from '../../utils/permissions'
@@ -353,35 +353,74 @@ export function MyWorkPage() {
       <Card className="p-5">
         <CardHeader
           title="Platform modules"
-          description="Planned capabilities. No demo data or placeholder counts are shown."
-          action={<Badge variant="neutral">Roadmap</Badge>}
+          description="Implemented capabilities link to their live screens. Only genuinely missing integrations are marked Planned."
+          action={<Badge variant="neutral">Live and planned</Badge>}
         />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {Object.entries(ROADMAP_MODULES).map(([key, module]) => {
-            const Icon = module.icon
-            return (
-              <Link
-                key={key}
-                to={`/roadmap/${key}`}
-                className="group flex items-start gap-3 rounded-xl border border-slate-200 p-3.5 transition-colors hover:border-blue-200 hover:bg-blue-50/40 hover:no-underline"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors group-hover:bg-blue-100 group-hover:text-blue-700">
-                  <Icon aria-hidden="true" className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center justify-between gap-1">
-                    <span className="text-sm font-semibold text-navy-900">{module.title}</span>
-                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Planned
+
+        <div className="mt-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+            Implemented
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {IMPLEMENTED_MODULES.map((module) => {
+              const Icon = module.icon
+              return (
+                <Link
+                  key={module.to}
+                  to={module.to}
+                  className="group flex items-start gap-3 rounded-xl border border-slate-200 p-3.5 transition-colors hover:border-blue-200 hover:bg-blue-50/40 hover:no-underline"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors group-hover:bg-blue-100 group-hover:text-blue-700">
+                    <Icon aria-hidden="true" className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="text-sm font-semibold text-navy-900">{module.title}</span>
+                      <span className="shrink-0 rounded bg-success-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-success-700">
+                        Live
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                      {module.summary}
                     </span>
                   </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-slate-500">
-                    {module.summary}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+            Planned capabilities
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Object.entries(ROADMAP_MODULES).map(([key, module]) => {
+              const Icon = module.icon
+              return (
+                <Link
+                  key={key}
+                  to={`/roadmap/${key}`}
+                  className="group flex items-start gap-3 rounded-xl border border-slate-200 p-3.5 transition-colors hover:border-blue-200 hover:bg-blue-50/40 hover:no-underline"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors group-hover:bg-blue-100 group-hover:text-blue-700">
+                    <Icon aria-hidden="true" className="h-4 w-4" />
                   </span>
-                </span>
-              </Link>
-            )
-          })}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-1">
+                      <span className="text-sm font-semibold text-navy-900">{module.title}</span>
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                        Planned
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                      {module.summary}
+                    </span>
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </Card>
     </div>

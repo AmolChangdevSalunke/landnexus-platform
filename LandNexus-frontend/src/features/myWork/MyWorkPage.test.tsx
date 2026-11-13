@@ -68,6 +68,26 @@ describe('MyWorkPage', () => {
     expect(screen.getByText('Quick actions')).toBeInTheDocument()
     expect(screen.getByText('Access and scope')).toBeInTheDocument()
     expect(screen.getByText('Platform modules')).toBeInTheDocument()
+    expect(screen.getByText('Implemented')).toBeInTheDocument()
+    expect(screen.getByText('Planned capabilities')).toBeInTheDocument()
+
+    // Implemented modules must link to their live screens, not the roadmap.
+    expect(screen.getByRole('link', { name: /Proposals and approval/ })).toHaveAttribute(
+      'href',
+      '/proposals',
+    )
+    expect(screen.getByRole('link', { name: /Valuation and compensation/ })).toHaveAttribute(
+      'href',
+      '/monitoring/compensation',
+    )
+    expect(screen.getByRole('link', { name: /Monitoring and MIS/ })).toHaveAttribute(
+      'href',
+      '/monitoring',
+    )
+    expect(screen.getByRole('link', { name: /PFMS and DBT payments/ })).toHaveAttribute(
+      'href',
+      '/roadmap/pfms-dbt',
+    )
 
     // The removed summary tiles must not come back as placeholder statistics.
     expect(screen.queryByText('Assigned roles')).not.toBeInTheDocument()

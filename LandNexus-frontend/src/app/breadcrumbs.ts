@@ -11,9 +11,13 @@ const MASTER_RESOURCE_LABELS: Record<string, string> = {
 }
 
 const ROADMAP_LABELS: Record<string, string> = {
-  'valuation-compensation': 'Valuation and compensation',
-  gis: 'GIS map',
-  'monitoring-mis': 'Monitoring and MIS',
+  'routing-rules': 'Routing-rule administration',
+  'email-sms': 'E-mail and SMS delivery',
+  'pfms-dbt': 'PFMS and DBT payments',
+  'isro-bhuvan': 'ISRO Bhuvan imagery',
+  bhunaksha: 'BhuNaksha integration',
+  'external-land-records': 'External 7/12, 8A and Ferfar services',
+  'document-security': 'Antivirus and document encryption',
 }
 
 function titleCaseSlug(value: string): string {
