@@ -19,18 +19,23 @@ public class NotificationService {
     private static final int MAX_MESSAGE = 1000;
 
     private final NotificationRepository repository;
+    private final NotificationOutbox outbox;
     private final Clock clock;
 
-    public NotificationService(NotificationRepository repository, Clock clock) {
+    public NotificationService(NotificationRepository repository, NotificationOutbox outbox, Clock clock) {
         this.repository = repository;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
     @Transactional
     public void notify(UUID recipientUserId, String type, String title, String message,
                        String entityType, UUID entityId) {
-        repository.save(new Notification(recipientUserId, type, cut(title, MAX_TITLE), cut(message, MAX_MESSAGE),
-                entityType, entityId, clock.instant()));
+        Notification saved = repository.save(new Notification(recipientUserId, type, cut(title, MAX_TITLE),
+                cut(message, MAX_MESSAGE), entityType, entityId, clock.instant()));
+        // Outbox rows are written in this transaction; the provider call happens later, off the
+        // business transaction. If this method's transaction rolls back, no delivery survives.
+        outbox.enqueue(saved);
     }
 
     public PageResponse<NotificationResponse> list(UUID recipientUserId, boolean unreadOnly, int page, int size) {

@@ -3,6 +3,7 @@ package com.landnexus.shared.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,17 +26,20 @@ class NotificationServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-03T10:00:00Z");
 
     @Mock private NotificationRepository repository;
+    @Mock private NotificationOutbox outbox;
 
     private NotificationService service;
     private final UUID me = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new NotificationService(repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new NotificationService(repository, outbox, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
     void notify_savesAnUnreadNotification_andTrimsLongText() {
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
         service.notify(me, "PROPOSAL", "t".repeat(500), "m".repeat(5000), "Proposal", UUID.randomUUID());
 
         ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
@@ -45,6 +49,17 @@ class NotificationServiceTest {
         assertThat(saved.getValue().getCreatedAt()).isEqualTo(NOW);
         assertThat(saved.getValue().getTitle()).hasSize(200);
         assertThat(saved.getValue().getMessage()).hasSize(1000);
+        verify(outbox).enqueue(saved.getValue());
+    }
+
+    @Test
+    void notify_whenTheOutboxFails_propagatesSoTheBusinessTransactionRollsBack() {
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new IllegalStateException("outbox unavailable")).when(outbox).enqueue(any());
+
+        assertThatThrownBy(() -> service.notify(me, "PROPOSAL", "title", "message", "Proposal", UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("outbox unavailable");
     }
 
     @Test

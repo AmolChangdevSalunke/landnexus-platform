@@ -108,15 +108,15 @@ export const ROADMAP_MODULES: Record<string, RoadmapModule> = {
       'Audited activation and retirement of rules',
     ],
   },
-  'email-sms': {
-    title: 'E-mail and SMS delivery',
-    summary: 'Deliver workflow notifications outside the application.',
+  'notification-settings': {
+    title: 'Notification preferences and delivery console',
+    summary: 'Let users manage external delivery and give administrators a delivery console.',
     icon: Mail,
     contents: [
-      'E-mail provider configuration',
-      'SMS provider configuration',
-      'Per-user notification preferences',
-      'Delivery tracking and administrator review',
+      'Self-service e-mail and SMS preferences',
+      'Contact verification and opt-out handling',
+      'Administrator delivery console and resend',
+      'Bounce and complaint reporting',
     ],
   },
   'pfms-dbt': {

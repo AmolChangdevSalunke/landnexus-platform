@@ -1,6 +1,6 @@
 # LandNexus - Project Status
 
-**Last updated:** 13 November 2026
+**Last updated:** 14 November 2026
 **Scope of this file:** what exists in this repository now, what was actually run to prove it, and what is still missing.
 **Companion files:** `README.md` (one-page summary), `docs/SETUP_AND_RUN.md` (how to run), `docs/IMPLEMENTATION_CHANGELOG.md` (history).
 
@@ -19,9 +19,11 @@ test suites named here.
 | `npm run test -- --run src/hooks/useVisibilityPolling.test.tsx src/features/monitoring` | `LandNexus-frontend` | 2 files, 26 tests passed | 13 Nov 2026 |
 | `npm run test -- --run src/features/proposals/ActionBar.test.tsx` | `LandNexus-frontend` | 1 file, 8 tests passed | 13 Nov 2026 |
 | `.\mvnw.cmd "-Dtest=ProposalWorkflowTest,ProposalServiceTest" test` | `landnexus-backend` | BUILD SUCCESS, 55 tests, 0 failures | 13 Nov 2026 |
-| `npm run build` (`tsc -b && vite build`) | `LandNexus-frontend` | exit 0, production bundle emitted | 13 Nov 2026 (run after each fix) |
+| `.\mvnw.cmd "-Dtest=ContactMaskerTest,NotificationTemplateServiceTest,NotificationOutboxTest,NotificationDeliveryAttemptServiceTest,NotificationDeliveryServiceTest,HttpNotificationAdapterTest,UserNotificationRecipientDirectoryTest,NotificationServiceTest" test` | `landnexus-backend` | BUILD SUCCESS, 38 tests, 0 failures | 14 Nov 2026 |
+| `.\mvnw.cmd -q -DskipTests test-compile` | `landnexus-backend` | exit 0 | 14 Nov 2026 |
+| `npm run test -- --run src/app` | `LandNexus-frontend` | 1 file, 4 tests passed | 14 Nov 2026 |
+| `npm run build` (`tsc -b && vite build`) | `LandNexus-frontend` | exit 0, production bundle emitted | 14 Nov 2026 |
 | `npm run test` (full frontend suite) | `LandNexus-frontend` | 42 files, 201 tests passed, 119.96 s | 12 Nov 2026 |
-| `.\mvnw.cmd -q -DskipTests test-compile` | `landnexus-backend` | exit 0 | 12 Nov 2026 |
 
 **Not run, and therefore not claimed:**
 
@@ -29,11 +31,13 @@ test suites named here.
   integration tests (`*IntegrationTest`, `AbstractIsolatedPgIntegrationTest`) need working
   `DB_*` credentials and a running PostgreSQL 18 + PostGIS instance. They were compiled but
   not executed in this session.
-- A fresh Flyway migration run against an empty database from V1 to V18.
+- A fresh Flyway migration run against an empty database from V1 to V19. V19 is new in this
+  session; the migration has been reviewed and compiles, but it has not been applied to a live
+  database here.
 - The PowerShell demo scripts (`scripts/full-demo.ps1`, `scripts/demo-seed*.ps1`). They need
   the same database and a running backend.
-- The full backend test count after this session's changes. Only the two targeted classes
-  above were executed.
+- The full backend test count after this session's changes. Only the targeted classes above
+  were executed. Database-backed integration tests were compiled but not run.
 
 Where this file says "tested", it means an automated test exists and the named command was
 run. It does not mean the whole system was re-verified end to end.
@@ -44,7 +48,7 @@ run. It does not mean the whole system was re-verified end to end.
 
 Backend modules live under `landnexus-backend/src/main/java/com/landnexus/`:
 `administration`, `projects`, `landrecords`, `acquisition`, `compensation`, `gis`, `reporting`, `shared`.
-Flyway migrations V1-V18 live in `landnexus-backend/src/main/resources/db/migration/`.
+Flyway migrations V1-V19 live in `landnexus-backend/src/main/resources/db/migration/`.
 The frontend has 14 feature folders under `LandNexus-frontend/src/features/` and 45 test files.
 
 | # | Area | Status | Evidence in the repository |
@@ -56,9 +60,10 @@ The frontend has 14 feature folders under `LandNexus-frontend/src/features/` and
 | 5 | Valuation and compensation | Built | Rate cards, rule sets, estimates, simulated payments, R&R benefits; V10, V11 |
 | 6 | GIS | Built (entered geometry only) | PostGIS geometry, alignments, boundary/conflict reports, imagery status; V12 |
 | 7 | Monitoring, MIS and SLA | Built | NLAMS progress, portfolio/district dashboards, MIS reports and CSV export, SLA rules and escalation; V13, V14, V18 |
+| 8 | External notifications | Built, off by default | E-mail/SMS channel adapters (`none`, `log`, `http`), transactional outbox, delivery records, bounded retries with backoff, masked contacts, admin delivery/retry API; V19 |
 | - | React frontend | Built | Feature screens for all of the above, MSW-backed tests, 45 test files |
 
-The backend has 32 controllers and 75 `*Test.java` classes. The frontend has 45 test files.
+The backend has 33 controllers and 82 `*Test.java` classes. The frontend has 45 test files.
 Those counts are structural facts, not a pass result.
 
 ### 2.1 What each area actually does
@@ -86,6 +91,40 @@ Those counts are structural facts, not a pass result.
   parcels, notification, award, possession). Dashboards refresh on a visibility-aware 30-second
   poll and show the last update time. Reports export CSV. The SLA scheduler is **off by
   default** (`LANDNEXUS_SLA_SCHEDULER=true` enables it); the manual scan always works.
+
+### 2.2 External notification delivery (e-mail and SMS)
+
+In-app notifications are unchanged and are always written. After a notification is saved,
+`NotificationService` asks `NotificationOutbox` to enqueue external delivery rows **in the same
+transaction**. Enqueueing only inserts rows; no provider call happens during approval or any
+other business transaction, so a slow or failing provider cannot block or roll back the
+business change. If the transaction rolls back, no delivery row survives.
+
+- **Channels and providers:** `EMAIL` and `SMS` are opt-in. Each channel is configured with
+  `LANDNEXUS_NOTIFICATIONS_EMAIL_PROVIDER` / `LANDNEXUS_NOTIFICATIONS_SMS_PROVIDER` as
+  `none` (default), `log` (development, writes to the application log, no network call) or
+  `http` (posts provider-neutral JSON to a configured webhook with an optional bearer token).
+  An unknown provider name fails at startup rather than silently dropping messages.
+- **Delivery records:** `notification_deliveries` is a transactional outbox with one row per
+  notification and channel, status `PENDING`, `SENT`, `FAILED` or `RETRY`, attempt count,
+  next-attempt time, provider name and a safe error. A unique `(notification_id, channel)`
+  constraint and a row lock before each send prevent duplicate delivery.
+- **Retries:** provider failures are retried with exponential backoff up to a configurable
+  maximum (`LANDNEXUS_NOTIFICATIONS_MAX_ATTEMPTS`, default 5), capped by
+  `_MAX_BACKOFF_MS`. Exhausted rows become `FAILED` and an administrator can requeue one with
+  a fresh budget.
+- **Contacts and privacy:** delivery rows store only a masked destination
+  (`j***e@example.com`, `******3210`); the real address is resolved again at send time.
+  `notification_contacts` holds optional per-user e-mail/phone and channel preferences.
+  Without a contact row, e-mail falls back to the address on `users` and SMS stays disabled.
+  Audit events contain the masked destination, never the raw contact.
+- **Administrator API:** `GET /api/v1/notifications/deliveries`,
+  `GET /api/v1/notifications/deliveries/by-notification/{notificationId}` and
+  `POST /api/v1/notifications/deliveries/{id}/retry`, all guarded by `SETTINGS_MANAGE`.
+- **Still missing:** there is no screen or public API to edit contacts/preferences and no
+  delivery console in the frontend; the generic `http` webhook is the only real provider
+  adapter (no vendor-specific e-mail/SMS client); bounces and complaints are not processed;
+  and V19 has not been applied to a live database in this session.
 
 ---
 
@@ -115,7 +154,7 @@ Old roadmap links redirect: `/roadmap/valuation-compensation` -> `/monitoring/co
 | Key | Capability | Why it is not "done" |
 |---|---|---|
 | `routing-rules` | Routing-rule administration UI | Rules are seeded and applied by the backend, but there is no screen to create or retire them |
-| `email-sms` | E-mail and SMS delivery | Only in-app notifications exist; no provider, template or delivery record |
+| `notification-settings` | Notification preferences and delivery console | External delivery, provider adapters and delivery records exist, but there is no self-service preference screen, contact editor or admin delivery console in the frontend |
 | `pfms-dbt` | PFMS/DBT disbursement | Payments are simulated; there is no bank or government payment rail |
 | `isro-bhuvan` | ISRO Bhuvan imagery | No WMS/WMTS connection or licensed imagery |
 | `bhunaksha` | BhuNaksha cadastral import | No external cadastral service connection |
@@ -134,6 +173,12 @@ features. Nothing in the frontend invents data for them.
   `DEMO`. Do not load real personal or land data.
 - **Documents are not virus-scanned and not encrypted at rest.** They are stored outside the
   project with random names. Antivirus/encryption is a roadmap item.
+- **External delivery is opt-in and unproven against a real provider.** The default provider is
+  `none`, so no e-mail or SMS leaves the machine. `log` is for development. `http` is a generic
+  webhook, not a tested integration with a specific e-mail or SMS vendor. V19 has not been
+  applied to a live database here.
+- **No notification preference UI.** Contacts and channel preferences can only be set by
+  writing to `notification_contacts`; there is no API or screen for users or administrators.
 - **Access tokens remain valid for their short lifetime after a user is disabled.** Disabling
   a user does not revoke an already-issued access token before it expires.
 - **SLA escalation is opt-in.** With the default configuration the scheduled scan does not
@@ -175,8 +220,9 @@ owner can decide what to remove.
 
 1. Run the full backend `clean verify` and the PowerShell end-to-end demo against a real
    PostgreSQL/PostGIS instance, and record the results here.
-2. Add external notification delivery (e-mail/SMS) with provider adapters, delivery records,
-   retries and audit, while keeping the existing in-app notifications working.
+2. Add the notification preferences screen, contact verification/opt-out and an administrator
+   delivery console on top of the existing `/api/v1/notifications/deliveries` API, then connect
+   one real e-mail and SMS provider behind the generic `http` adapter.
 3. Add routing-rule administration and manual assignment from the UI.
 4. Harden documents: antivirus scan, encryption at rest, retention and legal-hold policy.
 5. Decide on and document a production deployment target (there is no Dockerfile or compose

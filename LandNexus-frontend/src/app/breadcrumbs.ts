@@ -12,7 +12,7 @@ const MASTER_RESOURCE_LABELS: Record<string, string> = {
 
 const ROADMAP_LABELS: Record<string, string> = {
   'routing-rules': 'Routing-rule administration',
-  'email-sms': 'E-mail and SMS delivery',
+  'notification-settings': 'Notification preferences and delivery console',
   'pfms-dbt': 'PFMS and DBT payments',
   'isro-bhuvan': 'ISRO Bhuvan imagery',
   bhunaksha: 'BhuNaksha integration',

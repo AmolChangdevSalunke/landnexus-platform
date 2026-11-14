@@ -28,7 +28,7 @@ describe('platform module catalogue', () => {
   it('keeps only genuinely missing capabilities on the roadmap', () => {
     expect(Object.keys(ROADMAP_MODULES)).toEqual([
       'routing-rules',
-      'email-sms',
+      'notification-settings',
       'pfms-dbt',
       'isro-bhuvan',
       'bhunaksha',
