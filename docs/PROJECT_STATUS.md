@@ -24,16 +24,19 @@ test suites named here.
 | `npm run test -- --run src/app` | `LandNexus-frontend` | 1 file, 4 tests passed | 14 Nov 2026 |
 | `npm run build` (`tsc -b && vite build`) | `LandNexus-frontend` | exit 0, production bundle emitted | 14 Nov 2026 |
 | `npm run test` (full frontend suite) | `LandNexus-frontend` | 42 files, 201 tests passed, 119.96 s | 12 Nov 2026 |
+| `.\mvnw.cmd "-Dtest=AcquisitionServicesTest,ProposalApprovedCaseInitiatorTest,ProposalServiceTest" test` | `landnexus-backend` | BUILD SUCCESS, 25 + 3 + 45 tests, 0 failures | 14 Nov 2026 |
+| `psql -f db/reconciliation/reconcile_duplicate_acquisition_cases.sql` | `landnexus-backend` | 15 redundant INITIATED cases merged into 11 CLOSED cases; postconditions passed | 14 Nov 2026 |
+| Flyway V16-V19 against `landnexus_dev` | `landnexus-backend` | `flyway_schema_history` success through version 19; `uq_acquisition_cases_project` present | 14 Nov 2026 |
+| `.\mvnw.cmd spring-boot:run` (DB_URL/DB_PASSWORD/JWT_SECRET from the environment) | `landnexus-backend` | Flyway validated 19 migrations, `Schema "public" is up to date`, application started | 14 Nov 2026 |
+| `.\mvnw.cmd "-Dtest=AcquisitionIntegrationTest" test` (disposable `landnexus_it_verify`) | `landnexus-backend` | 19 migrations applied from V1, 2 tests passed, 0 failures | 14 Nov 2026 |
 
 **Not run, and therefore not claimed:**
 
 - `.\mvnw.cmd clean verify` against a live PostgreSQL/PostGIS database. The database-backed
   integration tests (`*IntegrationTest`, `AbstractIsolatedPgIntegrationTest`) need working
-  `DB_*` credentials and a running PostgreSQL 18 + PostGIS instance. They were compiled but
-  not executed in this session.
-- A fresh Flyway migration run against an empty database from V1 to V19. V19 is new in this
-  session; the migration has been reviewed and compiles, but it has not been applied to a live
-  database here.
+  `DB_*` credentials and a running PostgreSQL 18 + PostGIS instance. `AcquisitionIntegrationTest`
+  was run against a disposable database on 14 Nov 2026; the other integration classes were
+  compiled but not executed in this session.
 - The PowerShell demo scripts (`scripts/full-demo.ps1`, `scripts/demo-seed*.ps1`). They need
   the same database and a running backend.
 - The full backend test count after this session's changes. Only the targeted classes above
@@ -123,8 +126,9 @@ business change. If the transaction rolls back, no delivery row survives.
   `POST /api/v1/notifications/deliveries/{id}/retry`, all guarded by `SETTINGS_MANAGE`.
 - **Still missing:** there is no screen or public API to edit contacts/preferences and no
   delivery console in the frontend; the generic `http` webhook is the only real provider
-  adapter (no vendor-specific e-mail/SMS client); bounces and complaints are not processed;
-  and V19 has not been applied to a live database in this session.
+  adapter (no vendor-specific e-mail/SMS client); and bounces and complaints are not processed.
+  V19 has been applied to `landnexus_dev` and the backend starts against it, but no live
+  provider has been configured, so no outbound message has been delivered end to end.
 
 ---
 
@@ -175,8 +179,8 @@ features. Nothing in the frontend invents data for them.
   project with random names. Antivirus/encryption is a roadmap item.
 - **External delivery is opt-in and unproven against a real provider.** The default provider is
   `none`, so no e-mail or SMS leaves the machine. `log` is for development. `http` is a generic
-  webhook, not a tested integration with a specific e-mail or SMS vendor. V19 has not been
-  applied to a live database here.
+  webhook, not a tested integration with a specific e-mail or SMS vendor. The V19 schema is
+  applied to `landnexus_dev`, but no provider has been configured or exercised end to end.
 - **No notification preference UI.** Contacts and channel preferences can only be set by
   writing to `notification_contacts`; there is no API or screen for users or administrators.
 - **Access tokens remain valid for their short lifetime after a user is disabled.** Disabling

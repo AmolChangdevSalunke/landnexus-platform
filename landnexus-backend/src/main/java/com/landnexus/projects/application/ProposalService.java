@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
@@ -76,6 +77,7 @@ public class ProposalService {
     private final ProposalRoutingService routing;
     private final ProposalService self;
 
+    @Autowired
     public ProposalService(ProposalRepository proposals, ProposalVersionRepository versions,
                            ProposalStatusHistoryRepository history, ProjectRepository projects,
                            ProposalAssignmentRepository assignmentRepository,

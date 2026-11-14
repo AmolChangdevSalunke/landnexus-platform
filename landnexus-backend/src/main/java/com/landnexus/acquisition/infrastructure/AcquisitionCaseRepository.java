@@ -23,4 +23,7 @@ public interface AcquisitionCaseRepository extends JpaRepository<AcquisitionCase
 
     /** Read all cases for a project; multiple rows indicate legacy duplicate data that must be reconciled explicitly. */
     java.util.List<AcquisitionCase> findAllByProjectId(UUID projectId);
+
+    /** V16 allows exactly one acquisition case per project. */
+    boolean existsByProjectId(UUID projectId);
 }

@@ -157,6 +157,19 @@ class AcquisitionServicesTest {
     }
 
     @Test
+    void create_existingCaseForProject_isAConflict_andDoesNotConsumeANumber() {
+        when(projects.findActiveProject(projectId)).thenReturn(Optional.of(
+                new ProjectRef(projectId, "PRJ-2026-000001", "DEMO", UUID.randomUUID(), districtId, Set.of(villageId))));
+        when(cases.existsByProjectId(projectId)).thenReturn(true);
+
+        assertThatThrownBy(() -> caseService.create(new CaseRequest(projectId, AcquisitionFramework.LARR_2013, null, null), manager))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("already exists");
+        verify(cases, never()).nextNumber();
+        verify(cases, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_unknownProject_isRejected() {
         when(projects.findActiveProject(projectId)).thenReturn(Optional.empty());
 

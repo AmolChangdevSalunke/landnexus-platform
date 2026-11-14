@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -196,6 +197,12 @@ public class AcquisitionCaseService {
                 .orElseThrow(() -> new InvalidRequestException("Unknown or inactive project: " + request.projectId()));
         geoScope.requireDistrictAccess(actor, project.districtId());
 
+        // V16 allows exactly one acquisition case per project. Check first for a clear message; the
+        // database constraint below is the concurrency-safe backstop.
+        if (cases.existsByProjectId(project.id())) {
+            throw new DuplicateResourceException("An acquisition case already exists for project " + project.code());
+        }
+
         // Take the number FIRST: a native query flushes pending changes, so nothing may be half-changed yet.
         Long sequence = cases.nextNumber();
         AcquisitionCase c = new AcquisitionCase();
@@ -207,7 +214,14 @@ public class AcquisitionCaseService {
         c.setFrameworkNote(blankToNull(request.frameworkNote()));
         c.setDescription(blankToNull(request.description()));
         c.setStatus(CaseStatus.INITIATED);
-        AcquisitionCase saved = cases.saveAndFlush(c);
+        AcquisitionCase saved;
+        try {
+            saved = cases.saveAndFlush(c);
+        } catch (DataIntegrityViolationException ex) {
+            // Another request created the case between the pre-check and this insert. The transaction
+            // is already aborted/rollback-only, so do not query; surface a 409 instead of a 500.
+            throw new DuplicateResourceException("An acquisition case already exists for project " + project.code());
+        }
         history.save(new CaseStatusHistory(saved.getId(), null, CaseStatus.INITIATED, "CREATE", actor.userId(),
                 actor.username(), null, clock.instant()));
         audit.record("CREATE", ENTITY, saved.getId(), "case=" + saved.getCaseNumber() + ", project=" + project.code()

@@ -276,6 +276,8 @@ class AcquisitionIntegrationTest {
         expect(created, 201);
         String caseId = id(created);
         assertThat(created.getResponse().getContentAsString()).contains("\"caseNumber\":\"ACQ-").contains("START_SURVEY");
+        // V16: a project can have exactly one acquisition case; a second manual creation is a 409.
+        expect(call(manager, "POST", ACQ + "/cases", "{\"projectId\":\"" + projectId + "\",\"framework\":\"LARR_2013\"}"), 409);
         expect(call(field2, "GET", ACQ + "/cases/" + caseId, null), 404);
         expect(call(finance, "GET", ACQ + "/cases/" + caseId, null), 200);
 
