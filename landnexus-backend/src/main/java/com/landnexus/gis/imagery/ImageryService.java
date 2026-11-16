@@ -43,20 +43,31 @@ public class ImageryService {
     public record Image(byte[] bytes, String contentType) {
     }
 
-    public record TestResult(boolean ok, Integer httpStatus, String contentType, int bytes, long elapsedMs, String message) {
+    public record TestResult(boolean ok, String connectionState, Integer httpStatus, String contentType, int bytes,
+                             long elapsedMs, String message) {
     }
 
     /** status is the HTTP status the API should answer with. The message never contains the URL or the secret. */
     public static final class ImageryException extends RuntimeException {
         private final int status;
+        private final Integer providerStatus;
 
         public ImageryException(int status, String message) {
+            this(status, message, null);
+        }
+
+        public ImageryException(int status, String message, Integer providerStatus) {
             super(message);
             this.status = status;
+            this.providerStatus = providerStatus;
         }
 
         public int status() {
             return status;
+        }
+
+        public Integer providerStatus() {
+            return providerStatus;
         }
     }
 
@@ -94,9 +105,13 @@ public class ImageryService {
         long started = System.nanoTime();
         try {
             Image image = fetch(Layer.IMAGERY, 73.80, 18.45, 73.90, 18.55, 64, 64);
-            return new TestResult(true, 200, image.contentType(), image.bytes().length, elapsed(started), "The provider answered with a picture.");
+            return new TestResult(true, "CONNECTED", 200, image.contentType(), image.bytes().length, elapsed(started),
+                    "The provider answered with a picture.");
         } catch (ImageryException e) {
-            return new TestResult(false, null, null, 0, elapsed(started), e.getMessage());
+            String state = e.status() == 503 ? "NOT_CONFIGURED"
+                    : e.providerStatus() != null && (e.providerStatus() == 401 || e.providerStatus() == 403)
+                    ? "AUTHENTICATION_FAILED" : "UNAVAILABLE";
+            return new TestResult(false, state, e.providerStatus(), null, 0, elapsed(started), e.getMessage());
         }
     }
 
@@ -134,7 +149,11 @@ public class ImageryService {
             HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
             try (InputStream in = response.body()) {
                 if (response.statusCode() != 200) {
-                    throw new ImageryException(502, "The imagery service answered with HTTP " + response.statusCode());
+                    int providerStatus = response.statusCode();
+                    String message = providerStatus == 401 || providerStatus == 403
+                            ? "The imagery service rejected authentication (HTTP " + providerStatus + ")"
+                            : "The imagery service answered with HTTP " + providerStatus;
+                    throw new ImageryException(502, message, providerStatus);
                 }
                 String type = response.headers().firstValue("Content-Type").orElse("").toLowerCase(Locale.ROOT);
                 if (!type.contains("xml")) {
@@ -247,7 +266,11 @@ public class ImageryService {
             HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
             try (InputStream in = response.body()) {
                 if (response.statusCode() != 200) {
-                    throw new ImageryException(502, "The imagery service answered with HTTP " + response.statusCode());
+                    int providerStatus = response.statusCode();
+                    String message = providerStatus == 401 || providerStatus == 403
+                            ? "The imagery service rejected authentication (HTTP " + providerStatus + ")"
+                            : "The imagery service answered with HTTP " + providerStatus;
+                    throw new ImageryException(502, message, providerStatus);
                 }
                 String type = response.headers().firstValue("Content-Type").orElse("").split(";")[0].trim().toLowerCase(Locale.ROOT);
                 if (!IMAGE_TYPES.contains(type)) {

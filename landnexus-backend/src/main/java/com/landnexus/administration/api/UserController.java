@@ -3,6 +3,10 @@ package com.landnexus.administration.api;
 import com.landnexus.administration.api.dto.UserCreateRequest;
 import com.landnexus.administration.api.dto.UserResponse;
 import com.landnexus.administration.api.dto.UserRolesRequest;
+import com.landnexus.administration.api.dto.UserProfileUpdateRequest;
+import com.landnexus.administration.api.dto.UserPermissionDtos.UpdateRequest;
+import com.landnexus.administration.api.dto.UserPermissionDtos.UserPermissions;
+import com.landnexus.administration.application.UserPermissionService;
 import com.landnexus.administration.application.UserService;
 import com.landnexus.shared.pagination.PageResponse;
 import com.landnexus.shared.security.CurrentActor;
@@ -26,9 +30,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService service;
+    private final UserPermissionService permissions;
 
-    public UserController(UserService service) {
+    public UserController(UserService service, UserPermissionService permissions) {
         this.service = service;
+        this.permissions = permissions;
     }
 
     @PreAuthorize("hasAuthority('USER_READ')")
@@ -42,6 +48,27 @@ public class UserController {
     @GetMapping("/{id}")
     public UserResponse get(@PathVariable UUID id) {
         return service.get(id);
+    }
+
+    @PreAuthorize("hasAuthority('USER_READ')")
+    @GetMapping("/{id}/permissions")
+    public UserPermissions permissions(@PathVariable UUID id) {
+        return permissions.get(id);
+    }
+
+    @PreAuthorize("hasAuthority('USER_PERMISSION_MANAGE')")
+    @PutMapping("/{id}/permissions")
+    public UserPermissions updatePermissions(@PathVariable UUID id, @Valid @RequestBody UpdateRequest request,
+                                             Authentication authentication) {
+        return permissions.replace(id, request, CurrentActor.from(authentication));
+    }
+
+    @PreAuthorize("hasAuthority('USER_WRITE')")
+    @PutMapping("/{id}")
+    public UserResponse updateProfile(@PathVariable UUID id,
+                                      @Valid @RequestBody UserProfileUpdateRequest request,
+                                      Authentication authentication) {
+        return service.updateProfile(id, request, CurrentActor.from(authentication));
     }
 
     @PreAuthorize("hasAuthority('USER_WRITE')")

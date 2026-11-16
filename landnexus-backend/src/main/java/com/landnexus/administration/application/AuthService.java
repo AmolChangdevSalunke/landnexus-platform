@@ -164,7 +164,8 @@ public class AuthService {
     }
 
     private TokenResponse issueTokens(UserAccount user, Instant now) {
-        String accessToken = jwtService.createAccessToken(user.getId(), user.getUsername(), user.authorityCodes(), now);
+        String accessToken = jwtService.createAccessToken(user.getId(), user.getUsername(), user.authorityCodes(),
+                user.getAuthorizationVersion(), now);
         String rawRefreshToken = TokenGenerator.newToken();
         Instant expiresAt = now.plus(Duration.ofDays(properties.refreshTokenDays()));
         refreshTokens.save(new RefreshToken(user, TokenHasher.sha256(rawRefreshToken), expiresAt));

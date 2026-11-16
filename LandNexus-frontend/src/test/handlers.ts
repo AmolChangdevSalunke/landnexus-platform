@@ -430,6 +430,7 @@ export const handlers = [
   http.post(`${API_BASE_URL}/gis/imagery/test`, () =>
     HttpResponse.json({
       ok: false,
+      connectionState: 'UNAVAILABLE',
       httpStatus: null,
       contentType: null,
       bytes: 0,
@@ -615,7 +616,21 @@ export const DASHBOARD_FIXTURE = {
       { status: 'FAILED', count: 1, amount: 10000 },
     ],
     rrCasesByStatus: { IDENTIFIED: 2, ASSESSED: 1, APPROVED: 1, COMPLETED: 1 },
+    pfmsSimulatedPayments: [{ status: 'CONFIRMED', count: 1, amount: 150000 }],
+    dbtSimulatedPayments: [{ status: 'FAILED', count: 1, amount: 10000 }],
+    paymentsByChannel: {
+      PFMS_SIMULATED: [{ status: 'CONFIRMED', count: 1, amount: 150000 }],
+      DBT_SIMULATED: [{ status: 'FAILED', count: 1, amount: 10000 }],
+      OTHER_SIMULATED: [],
+      UNCLASSIFIED: [],
+    },
     paymentMode: 'SIMULATED' as const,
+  },
+  operations: {
+    gisConflicts: 3,
+    pendingTasks: 4,
+    escalationsByLevel: { WARNING: 2, BREACH: 1 },
+    officerWorkload: [],
   },
   trend: [
     { month: '2025-09', proposalsSubmitted: 2, casesOpened: 1 },

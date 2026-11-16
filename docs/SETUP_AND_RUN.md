@@ -56,8 +56,18 @@ Check: `Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -
 cd landnexus-backend
 .\mvnw.cmd clean verify
 ```
-Read this first: the integration tests run against the REAL configured database and create and delete their own test rows.
-Never point them at a database that holds data you care about. The same environment variables must be set.
+Database integration tests require a separately created disposable PostgreSQL/PostGIS database through
+`LANDNEXUS_TEST_DB_URL`, `LANDNEXUS_TEST_DB_USERNAME` and `LANDNEXUS_TEST_DB_PASSWORD`. The test guard refuses
+`landnexus_dev`; do not point tests at a shared or production database. Use a new database name and do not reset
+or drop an existing database to rerun tests.
+
+```powershell
+psql -U postgres -h localhost -c "CREATE DATABASE landnexus_test_new;"
+$env:LANDNEXUS_TEST_DB_URL = "jdbc:postgresql://localhost:5432/landnexus_test_new"
+$env:LANDNEXUS_TEST_DB_USERNAME = "postgres"
+$env:LANDNEXUS_TEST_DB_PASSWORD = "<your postgres password>"
+.\mvnw.cmd test
+```
 
 ## 7. Run the frontend
 ```powershell
@@ -68,6 +78,7 @@ npm run dev
 ```
 Open http://localhost:5173. Keep this port: the backend only allows that origin by default (`CORS_ALLOWED_ORIGINS`).
 Quality checks: `npm run build` and `npm run test`.
+The GIS workspace uses the public OpenStreetMap tile service as its interactive fallback and requires network access to load tiles. Optional imagery settings are documented in `docs/IMAGERY_SETUP.md`; do not configure an unverified endpoint or label it connected unless its live check succeeds.
 
 ## 8. See everything working: the end-to-end DEMO
 With the backend running (step 5), in a new window with the same `LANDNEXUS_ADMIN_*` variables:
@@ -79,9 +90,12 @@ simulated payments, R&R, GIS, dashboards, SLA) and prints PASS/FAIL for every st
 names and password of that run so you can log in to the frontend as, for example, the field officer or the competent authority.
 Those accounts are synthetic and local only. Re-running adds new DEMO data with a new random suffix (history and audit rows are append-only by design).
 
-## 9. Roles in the demo
-CONSULTANT (proposals), SCRUTINY_OFFICER (scrutiny, land records, verification, estimates), COMPETENT_AUTHORITY (decisions, approvals),
-FIELD_OFFICER (surveys, boundaries, parcels), FINANCE_OFFICER (payments, read-only reports), SUPER_ADMIN/CENTRAL_ADMIN (master data, users, rules, SLA settings).
+## 9. Roles and administration in the demo
+The seed creates synthetic accounts for the supported roles. Use `-ShowCredentials` with the demo script to print that run's generated credentials; do not copy production credentials into source or documentation. The role permission matrix is at `/admin/roles`, user administration is at `/admin/users`, and proposal routing rule configuration is at `/admin/routing-rules`; each requires the corresponding backend permission. Users can edit account email/display name, roles and existing geographic scopes. Geographic user scopes currently stop at state/division/district; taluka/village permission inheritance is not implemented. Routing configuration does not provide named officer targets.
+
+MIS reports at `/monitoring/reports` use database views and support state, district, status, date, project and district-selected taluka filters. The main dashboard supports project/taluka/date filters and database-backed GIS conflict, pending-task, escalation-level and permission-gated officer workload aggregates. Dashboard status filtering/export is not implemented; district comparison and trend do not narrow by those dashboard filters. PFMS/DBT rail breakdowns remain unavailable until the payment schema records an explicit rail.
+
+Latest database verification (15 Nov 2026): the full backend suite passed 579 tests with Flyway through V25; focused user permission/authentication tests passed 55 tests; the demo script passed twice with 193 checks each; filtered dashboard and MIS values matched direct PostgreSQL queries for sampled aggregates. On 16 Nov, frontend tests passed 50 files/250 tests and production build exited successfully, and backend compile plus focused dashboard/role unit tests passed. V26 is present but has not yet been applied or verified against PostgreSQL because the isolated database settings were unavailable. Flyway applies V24-V26 on startup. Access-token validation checks the current user authorization version in PostgreSQL, so authenticated requests depend on database availability. See `docs/TESTING_AND_VERIFICATION.md` and `docs/FINAL_ACCEPTANCE_REPORT.md` for exact limits and counts.
 
 ## 10. Troubleshooting
 | Symptom | Cause and fix |
@@ -90,13 +104,16 @@ FIELD_OFFICER (surveys, boundaries, parcels), FINANCE_OFFICER (payments, read-on
 | The app stops at start with a missing property | an environment variable is not set in THIS window |
 | 404 `No static resource api/v1/...` | an old backend is still running on port 8080: stop it and start the new jar |
 | 401 on every call | the token expired (15 minutes): log in again |
+| Authenticated requests fail while PostgreSQL is unavailable | current token-version validation requires a live user/authorization-version lookup; restore DB availability |
 | Browser says CORS error | run the frontend on http://localhost:5173 or set `CORS_ALLOWED_ORIGINS` |
 | Flyway or PostGIS error at start | PostGIS is not installed for that PostgreSQL, or the DB user cannot create extensions |
 | An entry made between 00:00 and 05:30 IST rejects "today" | known limitation: business dates are validated in UTC |
 
-## 11. Known limits (also in docs/PROJECT_STATUS.md)
-Payments are simulated; uploaded files are not virus-scanned or encrypted at rest; there is no password reset, no rate limiting and no OpenAPI page yet;
-access tokens stay valid up to 15 minutes after a user is disabled; the SLA scheduler is off by default (`LANDNEXUS_SLA_SCHEDULER=true` turns it on, the manual scan always works).
+## 11. API and integrations
+REST endpoints are rooted at `/api/v1`. The generated OpenAPI document is available at `http://localhost:8080/api/v1/meta/openapi.json`; the endpoint catalogue is in `docs/API_DOCUMENTATION.md`. Flyway migrations run on backend startup. Payments are simulated only; a standalone DBT/NPCI beneficiary workflow and real PFMS integration are not implemented. No live Bhuvan service is claimed; the GIS map uses OSM fallback tiles.
+
+## 12. Known limits (also in docs/PROJECT_STATUS.md)
+Payments are simulated; payment-channel labels do not connect to PFMS/DBT or transfer funds; uploaded files are not virus-scanned or encrypted at rest; there is no rate limiting; and the SLA scheduler is off by default (`LANDNEXUS_SLA_SCHEDULER=true` turns it on, while the manual scan remains available). V25 authorization-version checks invalidate access tokens after user/role/permission changes. The demo does not implement every requested NLAMS acceptance criterion; see `docs/DEMO_READINESS.md` and `docs/KNOWN_ISSUES.md`.
 
 ## Linux notes
 Use `./mvnw` instead of `mvnw.cmd`, `export NAME=value` instead of `$env:NAME`, and install PostGIS with `apt install postgresql-18-postgis-3`

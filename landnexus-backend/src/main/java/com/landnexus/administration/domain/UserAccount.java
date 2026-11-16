@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -66,11 +67,17 @@ public class UserAccount {
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 
+    @Column(name = "authorization_version", nullable = false)
+    private long authorizationVersion;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private Set<UserPermissionOverride> permissionOverrides = new HashSet<>();
 
     @PrePersist
     void onCreate() {
@@ -105,6 +112,13 @@ public class UserAccount {
                 codes.add(permission.getCode());
             }
         }
+        for (UserPermissionOverride override : permissionOverrides) {
+            if (override.isGranted()) {
+                codes.add(override.getPermission().getCode());
+            } else {
+                codes.remove(override.getPermission().getCode());
+            }
+        }
         return codes;
     }
 
@@ -116,6 +130,9 @@ public class UserAccount {
         }
         return codes;
     }
+
+    public long getAuthorizationVersion() { return authorizationVersion; }
+    public void invalidateAuthorization() { authorizationVersion++; }
 
     public UUID getId() { return id; }
     public String getUsername() { return username; }
@@ -141,4 +158,5 @@ public class UserAccount {
     public String getUpdatedBy() { return updatedBy; }
     public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
     public Set<Role> getRoles() { return roles; }
+    public Set<UserPermissionOverride> getPermissionOverrides() { return permissionOverrides; }
 }

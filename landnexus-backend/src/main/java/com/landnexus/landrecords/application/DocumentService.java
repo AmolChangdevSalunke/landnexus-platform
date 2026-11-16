@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,8 @@ public class DocumentService {
 
     private static final String ENTITY = "LandDocument";
     private static final int HEAD_BYTES = 16;
+    /** Only these types are served inline; anything else must be downloaded as an attachment. */
+    private static final Set<String> PREVIEWABLE_TYPES = Set.of("application/pdf", "image/jpeg", "image/png");
 
     private final LandParcelRepository parcels;
     private final LandDocumentRepository documents;
@@ -76,11 +79,24 @@ public class DocumentService {
     @Transactional
     public UploadedFile.Download download(UUID documentId, int versionNo, CurrentActor actor) {
         LandDocument document = loadDocument(documentId, actor);
-        LandDocumentVersion version = versions.findByDocumentIdAndVersionNo(document.getId(), versionNo)
-                .orElseThrow(() -> new ResourceNotFoundException("Version " + versionNo + " of the document was not found"));
+        LandDocumentVersion version = loadVersion(document.getId(), versionNo);
         audit.record("DOWNLOAD", ENTITY, document.getId(), "version=" + versionNo + ", sha256=" + version.getSha256());
-        return new UploadedFile.Download(storage.load(version.getStoredKey()), version.getOriginalFilename(),
-                version.getContentType(), version.getSizeBytes());
+        return toDownload(version);
+    }
+
+    /**
+     * Inline preview is a distinct, audited action. Only PDF, JPEG and PNG are served inline; the type was
+     * decided from the file bytes at upload, not from the name the client sent.
+     */
+    @Transactional
+    public UploadedFile.Download preview(UUID documentId, int versionNo, CurrentActor actor) {
+        LandDocument document = loadDocument(documentId, actor);
+        LandDocumentVersion version = loadVersion(document.getId(), versionNo);
+        if (!PREVIEWABLE_TYPES.contains(version.getContentType())) {
+            throw new InvalidRequestException("This file type cannot be previewed; download it instead");
+        }
+        audit.record("PREVIEW", ENTITY, document.getId(), "version=" + versionNo + ", sha256=" + version.getSha256());
+        return toDownload(version);
     }
 
     @Transactional
@@ -173,6 +189,16 @@ public class DocumentService {
 
     private LandParcel loadParcel(UUID parcelId) {
         return parcels.findById(parcelId).orElseThrow(() -> new ResourceNotFoundException("Parcel not found: " + parcelId));
+    }
+
+    private LandDocumentVersion loadVersion(UUID documentId, int versionNo) {
+        return versions.findByDocumentIdAndVersionNo(documentId, versionNo)
+                .orElseThrow(() -> new ResourceNotFoundException("Version " + versionNo + " of the document was not found"));
+    }
+
+    private UploadedFile.Download toDownload(LandDocumentVersion version) {
+        return new UploadedFile.Download(storage.load(version.getStoredKey()), version.getOriginalFilename(),
+                version.getContentType(), version.getSizeBytes());
     }
 
     /** Read access = DOCUMENT_READ + geographic scope; otherwise "not found". */

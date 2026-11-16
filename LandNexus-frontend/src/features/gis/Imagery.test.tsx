@@ -83,6 +83,7 @@ describe('ImageryStatusCard', () => {
       http.post(`${API_BASE_URL}/gis/imagery/test`, () =>
         HttpResponse.json({
           ok: true,
+          connectionState: 'CONNECTED',
           httpStatus: 200,
           contentType: 'image/png',
           bytes: 1234,
@@ -98,10 +99,35 @@ describe('ImageryStatusCard', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Test provider' }))
 
-    expect(await screen.findByText('Provider reachable')).toBeInTheDocument()
+    expect(await screen.findByText('BHUVAN CONNECTED')).toBeInTheDocument()
     expect(screen.getByText('HTTP 200')).toBeInTheDocument()
     expect(screen.getByText('image/png')).toBeInTheDocument()
     expect(screen.getByText(/answered with a picture/)).toBeInTheDocument()
+  })
+
+  it('distinguishes Bhuvan authentication failure from general unavailability', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.post(`${API_BASE_URL}/gis/imagery/test`, () =>
+        HttpResponse.json({
+          ok: false,
+          connectionState: 'AUTHENTICATION_FAILED',
+          httpStatus: 403,
+          contentType: null,
+          bytes: 0,
+          elapsedMs: 42,
+          message: 'The imagery service rejected authentication (HTTP 403)',
+        }),
+      ),
+    )
+
+    renderWithProviders(<ImageryStatusCard />, {
+      auth: authWith(['GIS_READ', 'SETTINGS_MANAGE']),
+    })
+    await user.click(await screen.findByRole('button', { name: 'Test provider' }))
+
+    expect(await screen.findByText('BHUVAN AUTHENTICATION FAILED')).toBeInTheDocument()
+    expect(screen.getByText('HTTP 403')).toBeInTheDocument()
   })
 
   it('renders nothing without GIS_READ', () => {

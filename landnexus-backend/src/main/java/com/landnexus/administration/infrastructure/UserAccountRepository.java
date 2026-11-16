@@ -16,6 +16,11 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, UUID> 
 
     boolean existsByEmail(String email);
 
+    boolean existsByEmailAndIdNot(String email, UUID id);
+
     @Query("select distinct u from UserAccount u join u.roles r where r.code = :roleCode and u.enabled = true")
     List<UserAccount> findEnabledByRoleCode(@Param("roleCode") String roleCode);
+
+    @Query("select distinct u from UserAccount u join u.roles r where r.code = :roleCode")
+    List<UserAccount> findAllByRoleCode(@Param("roleCode") String roleCode);
 }

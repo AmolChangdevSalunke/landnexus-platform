@@ -3,9 +3,13 @@ import type {
   AuditEventResponse,
   LoginHistoryResponse,
   PageResponse,
+  PermissionResponse,
   RoleResponse,
   ScopeEntryResponse,
   UserCreateRequest,
+  UserProfileUpdateRequest,
+  UserPermissionOverrideRequest,
+  UserPermissions,
   UserResponse,
   UserScopesRequest,
 } from './types'
@@ -33,6 +37,32 @@ export async function createUser(request: UserCreateRequest): Promise<UserRespon
   return data
 }
 
+export async function updateUserProfile(
+  id: string,
+  request: UserProfileUpdateRequest,
+): Promise<UserResponse> {
+  const { data } = await apiClient.put<UserResponse>(`/administration/users/${id}`, request)
+  return data
+}
+
+export async function getUserPermissions(id: string): Promise<UserPermissions> {
+  const { data } = await apiClient.get<UserPermissions>(
+    `/administration/users/${id}/permissions`,
+  )
+  return data
+}
+
+export async function updateUserPermissions(
+  id: string,
+  request: UserPermissionOverrideRequest,
+): Promise<UserPermissions> {
+  const { data } = await apiClient.put<UserPermissions>(
+    `/administration/users/${id}/permissions`,
+    request,
+  )
+  return data
+}
+
 /** Replaces the complete role set of an account. */
 export async function updateUserRoles(id: string, roles: string[]): Promise<UserResponse> {
   const { data } = await apiClient.put<UserResponse>(`/administration/users/${id}/roles`, {
@@ -54,9 +84,27 @@ export async function setUserEnabled(id: string, enabled: boolean): Promise<User
 /* Roles and geographic scope                                          */
 /* ------------------------------------------------------------------ */
 
-/** All roles with their permission codes. Read-only; requires USER_READ. */
+/** All roles with their permission codes. Requires USER_READ. */
 export async function getRoles(): Promise<RoleResponse[]> {
   const { data } = await apiClient.get<RoleResponse[]>('/administration/roles')
+  return data
+}
+
+/** Permission catalogue. Requires USER_READ. */
+export async function getPermissions(): Promise<PermissionResponse[]> {
+  const { data } = await apiClient.get<PermissionResponse[]>('/administration/permissions')
+  return data
+}
+
+/** Replaces a role's complete permission set. Requires ROLE_MANAGE. */
+export async function updateRolePermissions(
+  id: string,
+  permissions: string[],
+): Promise<RoleResponse> {
+  const { data } = await apiClient.put<RoleResponse>(
+    `/administration/roles/${id}/permissions`,
+    { permissions },
+  )
   return data
 }
 

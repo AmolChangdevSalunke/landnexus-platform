@@ -59,7 +59,7 @@ public class ImageryController {
                     .header("X-Content-Type-Options", "nosniff").body(image.bytes());
         } catch (ImageryException e) {
             return ResponseEntity.status(e.status()).contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("status", e.status(), "message", e.getMessage()));
+                    .body(errorBody(e));
         }
     }
 
@@ -78,7 +78,21 @@ public class ImageryController {
             return ResponseEntity.ok(service.capabilities(filter));
         } catch (ImageryException e) {
             return ResponseEntity.status(e.status()).contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("status", e.status(), "message", e.getMessage()));
+                    .body(errorBody(e));
         }
+    }
+
+    private static Map<String, Object> errorBody(ImageryException exception) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("status", exception.status());
+        body.put("connectionState", exception.status() == 503 ? "NOT_CONFIGURED"
+                : exception.providerStatus() != null
+                        && (exception.providerStatus() == 401 || exception.providerStatus() == 403)
+                        ? "AUTHENTICATION_FAILED" : "UNAVAILABLE");
+        if (exception.providerStatus() != null) {
+            body.put("providerStatus", exception.providerStatus());
+        }
+        body.put("message", exception.getMessage());
+        return body;
     }
 }

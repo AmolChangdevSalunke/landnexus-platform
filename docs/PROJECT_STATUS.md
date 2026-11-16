@@ -1,6 +1,6 @@
 # LandNexus - Project Status
 
-**Last updated:** 14 November 2026
+**Last updated:** 15 November 2026
 **Scope of this file:** what exists in this repository now, what was actually run to prove it, and what is still missing.
 **Companion files:** `README.md` (one-page summary), `docs/SETUP_AND_RUN.md` (how to run), `docs/IMPLEMENTATION_CHANGELOG.md` (history).
 
@@ -15,6 +15,15 @@ test suites named here.
 
 | Command | Working directory | Result | Date |
 |---|---|---|---|
+| `.\mvnw.cmd test` (disposable `landnexus_nlams_test_20261115`) | `landnexus-backend` | **573 tests, 0 failures, 0 errors, 0 skipped**; migrations through V23 | 15 Nov 2026 |
+| `npm test` (full suite) | `LandNexus-frontend` | **50 files, 250 tests passed** | 15 Nov 2026 |
+| `npm run build` (`tsc -b && vite build`) | `LandNexus-frontend` | exit 0, production bundle built (chunk-size warning only) | 15 Nov 2026 |
+| `scripts/full-demo.ps1` (two runs) | repository root, disposable backend | Each run: **193 checks passed, 0 failed** | 15 Nov 2026 |
+| Dashboard/MIS response comparison with direct SQL | disposable PostgreSQL/PostGIS | Proposals 4/4, projects 2/2, active parcels 6/6, acquisition cases 2/2; filtered report 1/1 | 15 Nov 2026 |
+| Scheduled SLA integration exercise | scheduler-enabled backend, disposable database | One WARNING and one BREACH persisted; repeated scans left scheduler-triggered count at 2 | 15 Nov 2026 |
+| Demo data integrity queries | read-only `psql` queries | 13 users, 4 proposals, 2 projects, 2 cases, 6 parcels, 4 compensation payments, 2 R&R cases; 6/6 boundaries valid; selected orphan checks 0 | 15 Nov 2026 |
+| `.\mvnw.cmd -q -Dtest=DocumentServiceTest test` | `landnexus-backend` | 17 tests, 0 failures | 15 Nov 2026 |
+| `npm test -- --run src/features/landRecords/DocumentDetailsPage.test.tsx src/features/landRecords/DocumentsTab.test.tsx` | `LandNexus-frontend` | 2 files, 8 tests passed | 15 Nov 2026 |
 | `npm run test -- --run src/features/notifications src/app` | `LandNexus-frontend` | 3 files, 25 tests passed | 13 Nov 2026 |
 | `npm run test -- --run src/hooks/useVisibilityPolling.test.tsx src/features/monitoring` | `LandNexus-frontend` | 2 files, 26 tests passed | 13 Nov 2026 |
 | `npm run test -- --run src/features/proposals/ActionBar.test.tsx` | `LandNexus-frontend` | 1 file, 8 tests passed | 13 Nov 2026 |
@@ -32,18 +41,16 @@ test suites named here.
 
 **Not run, and therefore not claimed:**
 
-- `.\mvnw.cmd clean verify` against a live PostgreSQL/PostGIS database. The database-backed
-  integration tests (`*IntegrationTest`, `AbstractIsolatedPgIntegrationTest`) need working
-  `DB_*` credentials and a running PostgreSQL 18 + PostGIS instance. `AcquisitionIntegrationTest`
-  was run against a disposable database on 14 Nov 2026; the other integration classes were
-  compiled but not executed in this session.
-- The PowerShell demo scripts (`scripts/full-demo.ps1`, `scripts/demo-seed*.ps1`). They need
-  the same database and a running backend.
-- The full backend test count after this session's changes. Only the targeted classes above
-  were executed. Database-backed integration tests were compiled but not run.
+- `.\mvnw.cmd clean verify`. The full `test` suite was run against the disposable
+  `landnexus_nlams_test_20261115` database, but `clean verify` was not.
+- Docker/Testcontainers concurrency verification. Docker is not available in this environment.
+- `scripts/demo-seed*.ps1` as standalone scripts. `scripts/full-demo.ps1` did run twice against
+  the isolated backend; each execution passed 193 checks.
+- Real e-mail/SMS provider delivery and any government integration. None is configured.
 
 Where this file says "tested", it means an automated test exists and the named command was
-run. It does not mean the whole system was re-verified end to end.
+run. It does not mean every demo path was clicked end to end. The authoritative command record
+is `docs/TESTING_AND_VERIFICATION.md`.
 
 ---
 
@@ -51,22 +58,22 @@ run. It does not mean the whole system was re-verified end to end.
 
 Backend modules live under `landnexus-backend/src/main/java/com/landnexus/`:
 `administration`, `projects`, `landrecords`, `acquisition`, `compensation`, `gis`, `reporting`, `shared`.
-Flyway migrations V1-V19 live in `landnexus-backend/src/main/resources/db/migration/`.
-The frontend has 14 feature folders under `LandNexus-frontend/src/features/` and 45 test files.
+Flyway migrations V1-V23 live in `landnexus-backend/src/main/resources/db/migration/`.
+The frontend has 14 feature folders under `LandNexus-frontend/src/features/` and 50 test files.
 
 | # | Area | Status | Evidence in the repository |
 |---|---|---|---|
 | 1 | Administration and security | Built | Master data, JWT login + refresh rotation, users, roles, permissions, geographic scope, append-only audit, login history, password change/reset, IP rate limiting; V1-V4, V15 |
-| 2 | Proposals, projects and routing | Built | Proposal workflow engine, scrutiny, clarification/resubmission, versions, maker-checker approval, automatic project creation, `REOPEN`, routing rules and assignments, notifications; V5, V17 |
-| 3 | Land records and documents | Built | Parcels, landowners (masked, audited), ownership shares capped at 100%, mutations, 7/12 and 8A records, secure documents with versions and maker-checker verification; V6, V7 |
+| 2 | Proposals, projects and routing | Built | Proposal workflow engine, scrutiny, clarification/resubmission, versions, maker-checker approval, automatic project creation, `REOPEN`, routing rules and assignments, project edit/close/reopen with `PROJECT_MANAGE`, notifications; V5, V17, V20 |
+| 3 | Land records and documents | Built | Parcels, landowners (masked, audited), ownership shares capped at 100%, mutations, 7/12 and 8A records, secure documents with versions, maker-checker verification and audited inline preview; V6, V7 |
 | 4 | Land acquisition | Built | Cases initiated automatically for approved projects, surveys, notices, objections, awards, possession; V8, V9, V16 |
 | 5 | Valuation and compensation | Built | Rate cards, rule sets, estimates, simulated payments, R&R benefits; V10, V11 |
 | 6 | GIS | Built (entered geometry only) | PostGIS geometry, alignments, boundary/conflict reports, imagery status; V12 |
 | 7 | Monitoring, MIS and SLA | Built | NLAMS progress, portfolio/district dashboards, MIS reports and CSV export, SLA rules and escalation; V13, V14, V18 |
 | 8 | External notifications | Built, off by default | E-mail/SMS channel adapters (`none`, `log`, `http`), transactional outbox, delivery records, bounded retries with backoff, masked contacts, admin delivery/retry API; V19 |
-| - | React frontend | Built | Feature screens for all of the above, MSW-backed tests, 45 test files |
+| - | React frontend | Built | Feature screens for all of the above, MSW-backed tests, 50 test files |
 
-The backend has 33 controllers and 82 `*Test.java` classes. The frontend has 45 test files.
+The backend has 33 controllers and 83 `*Test.java` classes. The frontend has 50 test files.
 Those counts are structural facts, not a pass result.
 
 ### 2.1 What each area actually does
@@ -157,7 +164,8 @@ Old roadmap links redirect: `/roadmap/valuation-compensation` -> `/monitoring/co
 
 | Key | Capability | Why it is not "done" |
 |---|---|---|
-| `routing-rules` | Routing-rule administration UI | Rules are seeded and applied by the backend, but there is no screen to create or retire them |
+| `routing-rules` | Named officer/workload routing administration | Existing rule UI/API supports proposal/project type and area thresholds; named officer, availability and workload conditions are not supported |
+| `role-permissions` | Per-user module permissions and permission history | Role permission updates are available through a guarded matrix/API; a per-user module-permission matrix and dedicated role/permission history screens are not implemented |
 | `notification-settings` | Notification preferences and delivery console | External delivery, provider adapters and delivery records exist, but there is no self-service preference screen, contact editor or admin delivery console in the frontend |
 | `pfms-dbt` | PFMS/DBT disbursement | Payments are simulated; there is no bank or government payment rail |
 | `isro-bhuvan` | ISRO Bhuvan imagery | No WMS/WMTS connection or licensed imagery |

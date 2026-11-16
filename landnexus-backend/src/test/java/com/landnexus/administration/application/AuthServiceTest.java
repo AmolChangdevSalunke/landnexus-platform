@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -141,7 +142,7 @@ class AuthServiceTest {
                 .isInstanceOf(AuthenticationFailedException.class);
 
         verify(passwordEncoder, never()).matches("correct-password-1", "hash");
-        verify(jwtService, never()).createAccessToken(any(), any(), any(), any());
+        verify(jwtService, never()).createAccessToken(any(), any(), any(), anyLong(), any());
         assertThat(savedHistory().getFailureReason()).isEqualTo("ACCOUNT_LOCKED");
     }
 
@@ -165,7 +166,7 @@ class AuthServiceTest {
         user.setLockedUntil(NOW.minusSeconds(60));
         when(users.findByUsername("alice")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("correct-password-1", "hash")).thenReturn(true);
-        when(jwtService.createAccessToken(eq(id), eq("alice"), any(), eq(NOW))).thenReturn("access-jwt");
+        when(jwtService.createAccessToken(eq(id), eq("alice"), any(), eq(0L), eq(NOW))).thenReturn("access-jwt");
 
         TokenResponse response = service.login(new LoginRequest(" Alice ", "correct-password-1"), CLIENT);
 
@@ -188,7 +189,7 @@ class AuthServiceTest {
         UserAccount user = user(id);
         RefreshToken stored = new RefreshToken(user, TokenHasher.sha256(RAW_REFRESH), NOW.plusSeconds(3600));
         when(refreshTokens.findByTokenHash(TokenHasher.sha256(RAW_REFRESH))).thenReturn(Optional.of(stored));
-        when(jwtService.createAccessToken(eq(id), eq("alice"), any(), eq(NOW))).thenReturn("new-access");
+        when(jwtService.createAccessToken(eq(id), eq("alice"), any(), eq(0L), eq(NOW))).thenReturn("new-access");
 
         TokenResponse response = service.refresh(RAW_REFRESH);
 
@@ -209,7 +210,7 @@ class AuthServiceTest {
 
         verify(refreshTokens).revokeAllForUser(id, NOW);
         verify(audit).recordAs(eq(id), eq("alice"), eq("TOKEN_REUSE_DETECTED"), eq("UserAccount"), eq(id), anyString());
-        verify(jwtService, never()).createAccessToken(any(), any(), any(), any());
+        verify(jwtService, never()).createAccessToken(any(), any(), any(), anyLong(), any());
     }
 
     @Test

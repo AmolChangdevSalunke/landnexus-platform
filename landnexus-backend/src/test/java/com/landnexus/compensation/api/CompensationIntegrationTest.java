@@ -27,12 +27,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 /** Real database, real filter chain, real tokens, synthetic DEMO data only. */
 @SpringBootTest
-class CompensationIntegrationTest {
+@ActiveProfiles("integration")
+class CompensationIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String ADMIN = "/api/v1/administration";
@@ -361,11 +364,24 @@ class CompensationIntegrationTest {
 
         expect(call(manager, "POST", generate, null), 403);
         expect(call(field1, "POST", generate, null), 403);
-        MvcResult created = call(finance, "POST", generate, null);
+        MvcResult created = call(finance, "POST", generate, "{\"paymentChannel\":\"PFMS_SIMULATED\"}");
         expect(created, 201);
         String body = created.getResponse().getContentAsString();
         assertThat(body).contains("\"amount\":2820001.2").contains("\"amount\":1880000.8").contains("\"mode\":\"SIMULATED\"")
-                .contains("\"status\":\"INSTRUCTED\"").doesNotContain("DEMO Owner");
+                .contains("\"status\":\"INSTRUCTED\"").contains("\"paymentChannel\":\"PFMS_SIMULATED\"")
+                .doesNotContain("DEMO Owner");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM compensation_payments WHERE valuation_id = ? AND payment_channel = 'PFMS_SIMULATED'",
+                Integer.class, UUID.fromString(valuation))).isEqualTo(2);
+        MvcResult dashboard = call(finance, "GET", "/api/v1/monitoring/dashboard?districtId=" + district1, null);
+        expect(dashboard, 200);
+        Long railCount = jdbc.queryForObject("SELECT COUNT(*) FROM compensation_payments WHERE valuation_id = ? "
+                + "AND payment_channel = 'PFMS_SIMULATED'", Long.class, UUID.fromString(valuation));
+        java.math.BigDecimal railAmount = jdbc.queryForObject("SELECT SUM(amount) FROM compensation_payments WHERE valuation_id = ? "
+                + "AND payment_channel = 'PFMS_SIMULATED'", java.math.BigDecimal.class, UUID.fromString(valuation));
+        assertThat(JsonPath.<Integer>read(dashboard.getResponse().getContentAsString(),
+                "$.finance.paymentsByChannel.PFMS_SIMULATED[0].count")).isEqualTo(railCount.intValue());
+        assertThat(JsonPath.<Double>read(dashboard.getResponse().getContentAsString(),
+                "$.finance.paymentsByChannel.PFMS_SIMULATED[0].amount")).isEqualTo(railAmount.doubleValue());
         expect(call(finance, "POST", generate, null), 409);
         String first = JsonPath.read(body, "$[0].id");
         String second = JsonPath.read(body, "$[1].id");
@@ -386,6 +402,17 @@ class CompensationIntegrationTest {
         assertThat(retry.getResponse().getContentAsString()).contains("\"attemptCount\":2");
         expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"CONFIRMED\"}"), 200);
         expect(call(finance, "POST", p1 + "/simulate-response", "{\"outcome\":\"CONFIRMED\"}"), 409);
+        MvcResult receipt = call(finance, "GET", p1 + "/receipt", null);
+        expect(receipt, 200);
+        assertThat(receipt.getResponse().getContentType()).contains("text/plain");
+        assertThat(receipt.getResponse().getHeader("Cache-Control")).contains("no-store");
+        assertThat(receipt.getResponse().getHeader("Content-Disposition")).contains("attachment");
+        assertThat(receipt.getResponse().getContentAsString())
+                .contains("DEMO / SIMULATED PAYMENT RECORD")
+                .contains("No money was transferred")
+                .contains("SIM-PFMS-")
+                .contains("Status: CONFIRMED")
+                .doesNotContain("DEMO Owner", "account number", "IFSC");
 
         String p2 = C + "/payments/" + second;
         expect(call(finance, "POST", p2 + "/release", null), 200);
@@ -397,6 +424,7 @@ class CompensationIntegrationTest {
                 .contains("\"confirmedAmount\":4700002.0").contains("\"failedAmount\":0");
         mockMvc.perform(get(p1 + "/events").header("Authorization", finance)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(5));
+        expect(call(consultant, "GET", p1 + "/receipt", null), 403);
         expect(call(consultant, "GET", C + "/cases/" + caseId + "/payments", null), 403);
     }
 

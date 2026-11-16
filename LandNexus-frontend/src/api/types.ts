@@ -153,6 +153,28 @@ export interface UserCreateRequest {
   roles: string[]
 }
 
+export interface UserProfileUpdateRequest {
+  email: string
+  fullName: string
+}
+
+export interface UserPermissionEntry {
+  code: string
+  description: string
+  roleGranted: boolean
+  override: boolean | null
+  effective: boolean
+}
+
+export interface UserPermissions {
+  userId: string
+  permissions: UserPermissionEntry[]
+}
+
+export interface UserPermissionOverrideRequest {
+  overrides: Array<{ code: string; granted: boolean }>
+}
+
 export interface UserResponse {
   id: string
   username: string
@@ -170,6 +192,12 @@ export interface RoleResponse {
   name: string
   description: string
   permissions: string[]
+}
+
+export interface PermissionResponse {
+  id: string
+  code: string
+  description: string
 }
 
 export type ScopeType = 'STATE' | 'DIVISION' | 'DISTRICT'
@@ -363,6 +391,12 @@ export interface ProposalAssignment {
   overdue: boolean
 }
 
+export interface ReassignmentCandidate {
+  id: string
+  username: string
+  scopeLevel: 'CENTRAL' | 'STATE' | 'DISTRICT' | 'NONE'
+}
+
 export interface MyTask {
   assignmentId: string
   proposalId: string
@@ -384,6 +418,42 @@ export interface MyTask {
 /* Projects                                                            */
 /* ------------------------------------------------------------------ */
 
+export type RoutingDecisionLevel = 'DISTRICT' | 'STATE' | 'CENTRAL'
+export type RoutingProjectType =
+  | 'NATIONAL_HIGHWAY'
+  | 'STATE_HIGHWAY'
+  | 'DISTRICT_ROAD'
+  | 'RURAL_ROAD'
+  | 'EXPRESSWAY'
+  | 'RAILWAY'
+  | 'DAM'
+  | 'IRRIGATION'
+  | 'SCHOOL'
+  | 'HOSPITAL'
+  | 'GOVERNMENT_BUILDING'
+  | 'OTHER_INFRASTRUCTURE'
+
+export interface RoutingRuleResponse {
+  id: string
+  name: string
+  minAreaHa: number | null
+  maxAreaHa: number | null
+  projectType: RoutingProjectType | null
+  decisionLevel: RoutingDecisionLevel
+  active: boolean
+  note: string | null
+  createdAt: string
+}
+
+export interface RoutingRuleRequest {
+  name: string
+  minAreaHa: number | null
+  maxAreaHa: number | null
+  projectType: RoutingProjectType | null
+  decisionLevel: RoutingDecisionLevel
+  note: string | null
+}
+
 export type ProjectStatus = 'ACTIVE' | 'CLOSED'
 
 export interface ProjectResponse {
@@ -404,6 +474,18 @@ export interface ProjectResponse {
   approvedByUserId: string
   approvedAt: string
   createdAt: string
+}
+
+/** The editable part of a project. Code, proposal and approval facts are immutable. */
+export interface ProjectUpdateRequest {
+  title: string
+  projectType: ProjectType
+  districtId: string
+  talukaId: string | null
+  departmentId: string
+  lengthKm: number | null
+  estimatedLandAreaHa: number
+  villageIds: string[]
 }
 
 /* ------------------------------------------------------------------ */
@@ -1030,6 +1112,11 @@ export interface CompensationSummary {
 
 export type PaymentStatus = 'INSTRUCTED' | 'SENT' | 'CONFIRMED' | 'FAILED'
 export type PaymentAction = 'RELEASE' | 'RETRY' | 'SIMULATE_CONFIRMED' | 'SIMULATE_FAILED'
+export type PaymentChannel =
+  | 'UNCLASSIFIED'
+  | 'PFMS_SIMULATED'
+  | 'DBT_SIMULATED'
+  | 'OTHER_SIMULATED'
 
 export interface PaymentResponse {
   id: string
@@ -1040,6 +1127,7 @@ export interface PaymentResponse {
   sharePercent: number
   amount: number
   status: PaymentStatus
+  paymentChannel: PaymentChannel
   mode: 'SIMULATED'
   reference: string | null
   failureReason: string | null
@@ -1299,6 +1387,7 @@ export interface ImageryStatus {
 /** POST /gis/imagery/test */
 export interface ImageryTestResult {
   ok: boolean
+  connectionState: 'CONNECTED' | 'AUTHENTICATION_FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED'
   httpStatus: number | null
   contentType: string | null
   bytes: number
@@ -1336,7 +1425,18 @@ export interface DashboardFinance {
   estimates: StatusAmount[]
   payments: StatusAmount[] | null
   rrCasesByStatus: Record<string, number> | null
+  pfmsSimulatedPayments: StatusAmount[] | null
+  dbtSimulatedPayments: StatusAmount[] | null
+  paymentsByChannel: Record<string, StatusAmount[]> | null
   paymentMode: 'SIMULATED' | null
+}
+
+export interface OfficerWorkload {
+  userId: string
+  username: string
+  pending: number
+  inProgress: number
+  overdue: number
 }
 
 export interface Dashboard {
@@ -1376,6 +1476,12 @@ export interface Dashboard {
     possessionsRecorded: number
   }
   finance: DashboardFinance | null
+  operations: {
+    gisConflicts: number
+    pendingTasks: number
+    escalationsByLevel: Record<string, number>
+    officerWorkload: OfficerWorkload[] | null
+  }
   trend: TrendPoint[]
   districts: DistrictRow[]
   notes: string[]

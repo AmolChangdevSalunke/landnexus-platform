@@ -451,3 +451,132 @@ sequenceDiagram
 - Real PostgreSQL integration tests / concurrency / rollback / `clean test` / `verify` against isolated DB → **NOT EXECUTED** (no disposable test DB provided; Docker unavailable). Attempting them without isolation would be unsafe and is prevented by fail-fast guards for the updated proposal integration tests.
 
 **Remaining gaps:** real isolated PG proof of scenarios 1–12 (DB-state assertions, genuine concurrent execution with barriers/latches, transaction-boundary instrumentation, V16 application on clean DB, legacy-multiple-case behavior in safe pre-V16/isolated strategy) still requires a disposable PostgreSQL instance. No Increment 2B/Task Management started.
+
+---
+
+### M.11 Phase 1 stabilisation, project management and document preview (2026-11-15)
+
+**Scope:** close the blocking proposal/document/authentication gaps, add safe project administration, and re-run the full suites. No destructive database action, commit or push was performed.
+
+#### Fixed defects
+
+| Defect | Root cause | Fix |
+|---|---|---|
+| `POST /projects/proposals/{id}/submit` failed and never allocated a number | `ProposalService` was class-level `@Transactional(readOnly = true)`, so the write path ran in a read-only transaction | Removed the class-level annotation and gave each operation an explicit transaction boundary; submission now commits and allocates `proposal_number`. |
+| `start-scrutiny` returned 409 when reassigning | The closing assignment update was not flushed before the replacement insert hit the partial unique index `uq_assignment_open_stage` | `ProposalRoutingService.startScrutiny` now calls `saveAndFlush` on the closing assignment before inserting the new one. |
+| Proposal integration tests failed during cleanup | `proposals` was deleted before dependent `proposal_assignments` | Cleanup order corrected in all three proposal integration classes. |
+| Stale actor fixtures | `CurrentActor` gained a four-argument shape and routing now deterministically selects `dual` over `officer` | Fixtures and expectations updated; no production behaviour weakened. |
+| Full backend suite failure | `ProposalRoutingServiceTest` expected three `save` calls | Test now asserts `saveAndFlush(open)` followed by the two expected `save` calls. |
+
+#### Project management
+
+- Added `V20__project_management.sql`: `PROJECT_MANAGE` permission, grants for `SUPER_ADMIN`, `CENTRAL_ADMIN`, `STATE_ADMIN`, `DIVISION_ADMIN` and `DISTRICT_ADMIN`, and `NOT VALID` check constraints for project title/area/length. No existing row is changed and no project is deleted.
+- Added `PUT /api/v1/projects/{id}`, `POST /api/v1/projects/{id}/close` and `POST /api/v1/projects/{id}/reopen`.
+- Project edits are transactional and audited. They preserve immutable code, proposal, owner and approval fields. Closed projects are read-only until reopened.
+- Existing proposal visibility and geographic scope still gate project access; the UI checks are not the security boundary.
+- Frontend: API functions/types, `PERMISSION.PROJECT_MANAGE`, `/projects/:id/edit`, `ProjectEditPage`, and Edit/Close/Reopen actions with confirmation and toasts.
+
+#### Document preview and validation
+
+- Added `GET /api/v1/land-records/documents/{id}/versions/{versionNo}/preview` with `DOCUMENT_READ`, inline disposition and an audited `PREVIEW` action.
+- Preview is restricted to `application/pdf`, `image/jpeg` and `image/png`; any other stored type is refused rather than served inline.
+- Download and preview now share the same response helper, so both set `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`.
+- Frontend: authenticated blob fetch, short-lived object URL, PDF `iframe` and image preview dialog, with URL revocation on close. Preview actions added to the document details page and the parcel documents tab.
+- File validation remains magic-byte based; malware scanning and encryption at rest are still deferred to Phase 3.
+
+#### Forgot password
+
+- `ForgotPasswordPage` now uses the existing public `POST /api/v1/auth/reset-password`, with local validation, backend error display and a success state.
+- Reset codes are still issued by a super administrator through `POST /api/v1/administration/users/{id}/password-reset`; the public page does not issue or reveal codes.
+
+#### Tests added or updated
+
+- `DocumentServiceTest`: preview audit, unsupported-type refusal and unknown-version cases.
+- `DocumentDetailsPage.test.tsx`: inline preview and object-URL revocation.
+- `ProjectServiceTest`, `ProjectEditPage.test.tsx`, `ProjectDetailsPage.test.tsx`: update/close/reopen, RBAC, closed-state and UI actions.
+- `ForgotPasswordPage.test.tsx`: reset request, validation and success.
+- Proposal routing/reliability fixtures updated as described above.
+
+#### Verification
+
+See `docs/TESTING_AND_VERIFICATION.md` for the exact commands, counts and date. Full backend and frontend suites and the frontend production build were run after these changes.
+
+#### Deferred
+
+- BUG-008 role/permission administration and BUG-009 routing-rule administration remain open and are scheduled for Phase 2.
+- No government integration was added or changed.
+
+### N. Incremental administration, GIS map and simulated receipt work (2026-11-15)
+
+This update supersedes the earlier statements above that role permissions and routing-rule configuration have no API or user interface. It does not claim completion of the full NLAMS acceptance list.
+
+- Role administration: added a permission catalogue and guarded role-permission update API, validation against the permission catalogue, audit events, and an editable permission matrix with confirmation in the frontend. The existing V21 role-permission schema is reused; no additional migration was needed for this UI/API.
+- Proposal routing administration: added guarded list/create/update/activate/deactivate endpoints and an admin page. Validation prevents invalid area ranges, duplicate rule names and deactivation of the final active rule. Existing V17 routing-rule storage is reused. Named officer/escalation targets remain unsupported; manual proposal reassignment was added in the subsequent increment below.
+- GIS frontend: added a Leaflet/OSM interactive map connected to existing scoped project/village GeoJSON endpoints, with layer toggles, survey/Gat search, popup attributes, GeoJSON import/export and client-side polygon area measurement. No synthetic geometry is generated by the map. OSM is a fallback basemap; live Bhuvan connectivity has not been verified.
+- Simulated compensation payments: added a `PAYMENT_READ`-guarded text receipt endpoint with no-store headers and a UI download action for confirmed simulated transactions. No account data is included in the receipt. This does not implement a separate DBT/NPCI beneficiary lifecycle or real PFMS transfers.
+- Added frontend tests for the new routing/GIS/role views and backend tests for role permissions, routing-rule validation and endpoint authorization.
+- Verification for this increment: frontend `npm test` passed 48 files / 244 tests; frontend `npm run build` succeeded; backend `-Dtest=RoleServiceTest,RoutingRuleAdminServiceTest test` passed 10 tests. Targeted integration tests were attempted but refused to start because a disposable `LANDNEXUS_TEST_DB_*` database was not configured; no shared/default database was used.
+
+### O. GIS persistence/status and proposal reassignment continuation
+
+- GIS GeoJSON uploads from the map now call the existing PostGIS parcel-boundary or project-alignment write APIs instead of remaining browser-local. The map requires an explicitly selected parcel/project, and backend validation, geographic authorization, versioning and audit remain authoritative. Existing conflict/map APIs are documented; no additional conflict engine is claimed.
+- Imagery health reporting distinguishes provider authentication rejection (HTTP 401/403) from service unavailability and keeps OSM fallback available. The Bhuvan API portal is reachable, but no authenticated call or imagery layer was verified; `BHUVAN_API_TOKEN` was not present in the environment.
+- Added V22 permission `PROPOSAL_ASSIGNMENT_MANAGE`, backend candidate and reassignment endpoints, validation against open proposal stage and district-eligible officers, audit/notification, and a proposal-details UI requiring a reassignment reason. The UI refreshes assignment history after success.
+- Added focused frontend tests for role-gated reassignment and submission. Backend focused unit tests for reassignment, role/routing administration and imagery passed. The full frontend suite passed 49 files / 248 tests, focused GIS/reassignment tests passed 3 files / 19 tests, and the production frontend build passed after the final UI change. Database-backed verification is blocked until an isolated test database is configured.
+- Full NLAMS acceptance remains incomplete. See `docs/FINAL_ACCEPTANCE_REPORT.md` for requirement-by-requirement status and unverified external/database checks.
+
+## Latest follow-on increment — MIS filters and user profile editing
+
+### Implemented
+
+- Added V23 reporting-view dimensions for project ID, creation/approval date and taluka IDs, preserving the original report columns and order.
+- Extended the existing `PROJECTS`, `ACQUISITION_CASES` and `COMPENSATION` MIS report queries with bound `fromDate`, `toDate`, `projectId` and `talukaId` parameters. State/district geographic scope remains resolved and applied by `ReportingScope`.
+- Extended run and CSV-export endpoints with the same filters; date order is validated, paged queries remain capped, CSV exports remain audited and capped.
+- Added date, project and district-selected taluka controls to the MIS reports page. Project/taluka lookup calls are gated by their existing read permissions.
+- Added `PUT /api/v1/administration/users/{id}` to update full name and email. The service normalizes values, rejects duplicate emails, applies the existing SUPER_ADMIN target guard, records the actor and audits the changed field names without copying profile PII into the audit detail.
+- Added an API-backed profile edit form in `/admin/users`; username is intentionally immutable and roles/scopes remain on their existing dedicated actions.
+
+### Verification and limits
+
+- `UserServiceTest`, `ReportServiceTest` and `ReportRepositoryTest`: 19 tests passed.
+- Full frontend suite: 50 files / 250 tests passed, including profile-edit and report-filter API coverage.
+- Frontend production TypeScript/Vite build passed; Vite reports the existing large-chunk warning.
+- V23 was not applied and analytics were not compared with direct SQL because no dedicated disposable test database URL was configured.
+- The main aggregate dashboard, multi-level SLA targets, taluka/village effective user scopes, and complete linked seed dataset remain partial; see `docs/IMPLEMENTATION_CHECKLIST.md` and `docs/FINAL_ACCEPTANCE_REPORT.md`.
+
+### Verification addendum — disposable PostgreSQL/PostGIS acceptance run (2026-11-15)
+
+This addendum supersedes the prior statement that V23 and database-backed analytics were not verified.
+
+- Created/used the dedicated disposable database `landnexus_nlams_test_20261115` on PostgreSQL 18.6 with PostGIS 3.6.2. The complete backend suite passed: 573 tests, 0 failures, 0 errors, 0 skipped. Flyway validated/applied through V23.
+- The initial suite run exposed a Spring test class not inheriting the isolated-database guard; it applied additive V23 report views to `landnexus_dev`. The class was fixed to extend `AbstractIsolatedPgIntegrationTest`, and the complete rerun used the disposable database. V23 uses `CREATE OR REPLACE VIEW`; the accidental application did not alter data rows.
+- `scripts/full-demo.ps1` completed twice; each run reported 193 checks passed and 0 failed. Read-only SQL measured users 13, proposals 4, projects 2, acquisition cases 2, parcels 6, compensation payments 4 and R&R cases 2. All 6 current parcel boundaries were valid; selected project, acquisition, payment and R&R orphan checks returned 0.
+- Sampled dashboard values matched SQL (proposals 4, projects 2, active parcels 6, cases 2). A project/taluka/date-filtered MIS report matched its direct SQL count (1).
+- A live scheduled backend scan persisted one WARNING and one BREACH escalation in PostgreSQL. Repeated scans left scheduler-triggered escalation rows at 2, verifying duplicate suppression for those keys. The temporary SLA rule thresholds were restored after the test.
+- Full frontend suite passed 50 files / 250 tests; production build succeeded with the existing Vite chunk-size advisory.
+- These results do not complete the outstanding scope: dashboard metrics/filters, distinct PFMS/DBT, configurable named multilevel escalation, village-level user scopes, full per-user permission history, and complete demo seed coverage remain partial.
+
+### Verification addendum — user permission administration (2026-11-15)
+
+- Added V24 per-user permission overrides and V25 authorization-version claims/checks. The isolated test database applied both migrations during the focused test run.
+- `GET/PUT /api/v1/administration/users/{id}/permissions` returns the effective role/override matrix and replaces explicit grants/denials. Only SUPER_ADMIN may manage overrides; new grants cannot exceed the actor's authorities. Changes are audited, refresh tokens revoked, and prior access tokens rejected after the authorization version increments.
+- Role creation/update flows now reject assignment of permissions the actor does not hold; national-scope roles are restricted to national administrators. Added user activity history UI backed by the existing paginated audit endpoint.
+- Focused backend verification passed: 55 tests across `UserServiceTest`, `UserPermissionIntegrationTest`, `SecurityEndpointsTest`, `AuthFlowIntegrationTest` and `AuthServiceTest` (0 failures/errors/skips). The frontend `UsersPage` test passed (6 tests).
+- This does not complete user administration: editable profile fields remain limited, the audit activity screen is shared rather than separate role/permission history pages, and village-level assignments remain unimplemented.
+
+### Verification addendum - dashboard analytics continuation (2026-11-15)
+
+- Added project, taluka and inclusive date filters to the main dashboard API and UI. Reporting scope validates filters against the actor's geographic access and project-read/ownership permissions.
+- Added PostgreSQL aggregates for GIS parcel/alignment conflicts, pending proposal assignments, escalations by level and officer workload. Workload identities and counts are returned only to actors with `USER_READ`.
+- Filtered proposal, project, acquisition and pending-task values matched direct SQL in PostgreSQL integration tests. PFMS/DBT rail breakdowns deliberately remain null because the compensation payment schema has no payment rail field.
+- Updated dashboard test fixtures for operational and nullable rail fields. Full backend suite passed 579 tests with no failures/errors/skips on `landnexus_nlams_test_20261115`; frontend suite passed 50 files / 250 tests and the production build exited successfully.
+- Dashboard status filters/exports, project-filtered district comparison/trend, distinct PFMS/DBT analytics and the other partial SLA/geography/routing/demo requirements remain outstanding.
+
+### Dashboard analytics continuation — 16 November 2026
+
+- Added V26 `compensation_payments.payment_channel` with constrained explicit simulated values (`UNCLASSIFIED`, `PFMS_SIMULATED`, `DBT_SIMULATED`, `OTHER_SIMULATED`); existing records are not classified by inference. The compensation API accepts an optional channel and remains backward-compatible when omitted.
+- Added dashboard proposal/project/acquisition status filters and filter propagation for district comparisons, trends, pending tasks, escalation statistics and channel aggregates. Added the simulated channel selector and labels to the payment/dashboard UI.
+- Role permission changes now increment authorization versions and revoke refresh tokens for users assigned the changed role; added a unit assertion for both effects.
+- Added a permission-gated role-permission audit history panel to the Roles screen and corrected stale UI text to explain immediate token invalidation. The full frontend suite passed 50 files/250 tests before this panel; the focused RolesPage suite passed 3/3 after it, and the production build passed afterward.
+- Verified backend compilation and focused dashboard/role unit tests. These checks do not verify V26 SQL or integration behavior.
+- Database verification is blocked in this run because the required disposable database URL, username and password environment variables are unset. V26 migration, direct SQL comparisons, full backend suite after V26, demo seed repeatability, scheduled SLA execution and lifecycle tests remain pending. Requirements 1–6 remain partial.

@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 import com.landnexus.administration.api.dto.UserCreateRequest;
 import com.landnexus.administration.api.dto.UserResponse;
 import com.landnexus.administration.api.dto.UserRolesRequest;
+import com.landnexus.administration.api.dto.UserProfileUpdateRequest;
+import com.landnexus.administration.domain.Permission;
 import com.landnexus.administration.domain.Role;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RefreshTokenRepository;
@@ -116,6 +118,32 @@ class UserServiceTest {
     }
 
     @Test
+    void create_roleWithPermissionActorDoesNotHold_isForbidden() {
+        Role consultant = new Role("CONSULTANT", "Consultant", "project work");
+        consultant.getPermissions().add(new Permission("PROJECT_WRITE", "Write projects"));
+        when(roles.findByCode("CONSULTANT")).thenReturn(Optional.of(consultant));
+        CurrentActor restrictedAdmin = new CurrentActor(UUID.randomUUID(), "district",
+                Set.of("DISTRICT_ADMIN"), Set.of("USER_WRITE"));
+
+        assertThatThrownBy(() -> service.create(request(STRONG, "CONSULTANT"), restrictedAdmin))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("PROJECT_WRITE");
+        verify(users, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_nationalRoleByDistrictAdmin_isForbidden() {
+        when(roles.findByCode("AUDITOR")).thenReturn(Optional.of(new Role("AUDITOR", "Auditor", "read only")));
+        CurrentActor districtAdmin = new CurrentActor(UUID.randomUUID(), "district",
+                Set.of("DISTRICT_ADMIN"), Set.of("USER_WRITE"));
+
+        assertThatThrownBy(() -> service.create(request(STRONG, "AUDITOR"), districtAdmin))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("national administrator");
+        verify(users, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_duplicateUsername_isConflict() {
         when(roles.findByCode("AUDITOR")).thenReturn(Optional.of(new Role("AUDITOR", "Auditor", "ro")));
         when(users.existsByUsername("alice")).thenReturn(true);
@@ -155,6 +183,46 @@ class UserServiceTest {
         assertThat(response.enabled()).isTrue();
         assertThat(response.roles()).containsExactly("AUDITOR");
         verify(audit).record(eq("CREATE"), eq("UserAccount"), any(), anyString());
+    }
+
+    @Test
+    void updateProfile_normalizesAndAuditsChanges() {
+        UUID id = UUID.randomUUID();
+        UserAccount user = existingUser(id, "AUDITOR");
+        when(users.findById(id)).thenReturn(Optional.of(user));
+        when(users.existsByEmailAndIdNot("alice@example.test", id)).thenReturn(false);
+        when(users.saveAndFlush(user)).thenReturn(user);
+
+        UserResponse response = service.updateProfile(
+                id, new UserProfileUpdateRequest(" Alice@Example.Test ", " Alice   Example "), centralAdmin);
+
+        assertThat(response.email()).isEqualTo("alice@example.test");
+        assertThat(response.fullName()).isEqualTo("Alice Example");
+        verify(audit).record(eq("UPDATE_PROFILE"), eq("UserAccount"), eq(id), anyString());
+    }
+
+    @Test
+    void updateProfile_duplicateEmailIsRejected() {
+        UUID id = UUID.randomUUID();
+        UserAccount user = existingUser(id, "AUDITOR");
+        when(users.findById(id)).thenReturn(Optional.of(user));
+        when(users.existsByEmailAndIdNot("taken@example.test", id)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateProfile(
+                id, new UserProfileUpdateRequest("taken@example.test", "Bob"), centralAdmin))
+                .isInstanceOf(DuplicateResourceException.class);
+        verify(users, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateProfile_superAdminAccountByCentralAdminIsForbidden() {
+        UUID id = UUID.randomUUID();
+        when(users.findById(id)).thenReturn(Optional.of(existingUser(id, "SUPER_ADMIN")));
+
+        assertThatThrownBy(() -> service.updateProfile(
+                id, new UserProfileUpdateRequest("root@example.test", "Root"), centralAdmin))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(users, never()).saveAndFlush(any());
     }
 
     @Test

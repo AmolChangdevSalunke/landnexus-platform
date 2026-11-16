@@ -255,9 +255,15 @@ export async function getCompensationSummary(
 /* ------------------------------------------------------------------ */
 
 /** One payment per owner, split by the ownership snapshot. Once per estimate. */
-export async function generatePayments(valuationId: string): Promise<PaymentResponse[]> {
+export type SimulatedPaymentChannel = 'PFMS_SIMULATED' | 'DBT_SIMULATED' | 'OTHER_SIMULATED'
+
+export async function generatePayments(
+  valuationId: string,
+  paymentChannel: SimulatedPaymentChannel = 'OTHER_SIMULATED',
+): Promise<PaymentResponse[]> {
   const { data } = await apiClient.post<PaymentResponse[]>(
     `/compensation/valuations/${valuationId}/payments`,
+    { paymentChannel },
   )
   return data
 }
@@ -279,6 +285,15 @@ export async function getPaymentSummary(caseId: string): Promise<PaymentSummary>
 export async function getPaymentEvents(paymentId: string): Promise<PaymentEventResponse[]> {
   const { data } = await apiClient.get<PaymentEventResponse[]>(
     `/compensation/payments/${paymentId}/events`,
+  )
+  return data
+}
+
+/** Downloads a no-store DEMO receipt for the simulated payment record. */
+export async function downloadPaymentReceipt(paymentId: string): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(
+    `/compensation/payments/${paymentId}/receipt`,
+    { responseType: 'blob' },
   )
   return data
 }
@@ -402,4 +417,3 @@ export async function completeRrCase(id: string): Promise<RrCaseResponse> {
   )
   return data
 }
-

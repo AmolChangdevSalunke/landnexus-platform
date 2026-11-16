@@ -11,6 +11,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -21,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -32,7 +34,8 @@ import org.springframework.web.context.WebApplicationContext;
  * Each test creates its own throw-away AUDITOR user (random name) and removes it afterwards.
  */
 @SpringBootTest
-class AuthFlowIntegrationTest {
+@ActiveProfiles("integration")
+class AuthFlowIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String STATES = "/api/v1/administration/states";

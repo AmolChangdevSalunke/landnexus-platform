@@ -119,7 +119,7 @@ export function ProjectListPage() {
       <PageHeader
         eyebrow="Module 2 · Government projects"
         title="Projects"
-        description="Projects created when a recommended proposal is approved. This register is read-only and shows only records allowed by your role and geographic scope."
+        description="Projects created when a recommended proposal is approved, shown only within your role and geographic scope. Administrators with PROJECT_MANAGE can correct details and close or reopen a project."
       />
 
       <Card className="mb-4 p-4">

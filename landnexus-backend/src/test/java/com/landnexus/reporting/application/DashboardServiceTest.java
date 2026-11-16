@@ -11,6 +11,7 @@ import com.landnexus.reporting.infrastructure.DashboardRepository;
 import com.landnexus.reporting.infrastructure.DashboardRepository.AcqParcelTotals;
 import com.landnexus.reporting.infrastructure.DashboardRepository.LandTotals;
 import com.landnexus.reporting.infrastructure.DistrictScope;
+import com.landnexus.reporting.infrastructure.DashboardFilter;
 import com.landnexus.shared.security.CurrentActor;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -42,6 +43,11 @@ class DashboardServiceTest {
     void setUp() {
         service = new DashboardService(repo, scopes, Clock.fixed(Instant.parse("2026-11-08T10:00:00Z"), ZoneOffset.UTC));
         lenient().when(scopes.resolve(any(), any(), any())).thenReturn(DistrictScope.all());
+        lenient().when(scopes.resolveDashboard(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> new DashboardFilter(
+                        scopes.resolve(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)),
+                        invocation.getArgument(3), invocation.getArgument(4), invocation.getArgument(5), invocation.getArgument(6),
+                        invocation.getArgument(7), invocation.getArgument(8), invocation.getArgument(9)));
         lenient().when(repo.proposalsByStatus(any())).thenReturn(Map.of("SUBMITTED", 2L, "UNDER_SCRUTINY", 1L, "RECOMMENDED", 1L, "APPROVED", 3L, "REJECTED", 1L));
         lenient().when(repo.projectsByStatus(any())).thenReturn(Map.of("ACTIVE", 3L));
         lenient().when(repo.projectsAreaHa(any())).thenReturn(new BigDecimal("120.5"));
@@ -50,7 +56,13 @@ class DashboardServiceTest {
         lenient().when(repo.acquisitionParcels(any())).thenReturn(new AcqParcelTotals(7, new BigDecimal("12.25")));
         lenient().when(repo.estimatesByStatus(any())).thenReturn(List.of(new StatusAmount("APPROVED", 2, new BigDecimal("3200002.00"))));
         lenient().when(repo.paymentsByStatus(any())).thenReturn(List.of(new StatusAmount("CONFIRMED", 2, new BigDecimal("3200002.00"))));
+        lenient().when(repo.paymentsByChannel(any())).thenReturn(Map.of(
+                "PFMS_SIMULATED", List.of(new StatusAmount("CONFIRMED", 1, new BigDecimal("100"))),
+                "DBT_SIMULATED", List.of(), "OTHER_SIMULATED", List.of(), "UNCLASSIFIED", List.of()));
         lenient().when(repo.rrCasesByStatus(any())).thenReturn(Map.of("COMPLETED", 1L));
+        lenient().when(repo.gisConflicts(any())).thenReturn(0L);
+        lenient().when(repo.pendingTasks(any())).thenReturn(0L);
+        lenient().when(repo.escalationsByLevel(any())).thenReturn(Map.of());
     }
 
     @Test

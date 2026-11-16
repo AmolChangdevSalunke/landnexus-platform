@@ -10,6 +10,7 @@ import type {
   ProposalStatus,
   ProposalValidationResponse,
   ProposalVersion,
+  ReassignmentCandidate,
 } from './types'
 
 export interface ProposalListParams {
@@ -79,6 +80,30 @@ export async function getProposalValidation(id: string): Promise<ProposalValidat
 /** Routing history of one proposal, oldest first. */
 export async function getProposalAssignments(id: string): Promise<ProposalAssignment[]> {
   const { data } = await apiClient.get<ProposalAssignment[]>(`/projects/proposals/${id}/assignments`)
+  return data
+}
+
+export async function getProposalReassignmentCandidates(
+  proposalId: string,
+  stage: ProposalAssignment['stage'],
+): Promise<ReassignmentCandidate[]> {
+  const { data } = await apiClient.get<ReassignmentCandidate[]>(
+    `/projects/proposals/${proposalId}/reassignment-candidates`,
+    { params: { stage } },
+  )
+  return data
+}
+
+export async function reassignProposalAssignment(
+  proposalId: string,
+  assignmentId: string,
+  assignedUserId: string,
+  reason: string,
+): Promise<ProposalAssignment> {
+  const { data } = await apiClient.post<ProposalAssignment>(
+    `/projects/proposals/${proposalId}/assignments/${assignmentId}/reassign`,
+    { assignedUserId, reason: reason.trim() },
+  )
   return data
 }
 

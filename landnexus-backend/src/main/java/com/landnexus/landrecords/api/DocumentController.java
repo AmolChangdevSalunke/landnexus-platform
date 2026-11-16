@@ -64,12 +64,28 @@ public class DocumentController {
     @PreAuthorize("hasAuthority('DOCUMENT_READ')")
     @GetMapping("/documents/{id}/versions/{versionNo}/download")
     public ResponseEntity<Resource> download(@PathVariable UUID id, @PathVariable int versionNo, Authentication a) {
-        UploadedFile.Download file = service.download(id, versionNo, CurrentActor.from(a));
+        return fileResponse(service.download(id, versionNo, CurrentActor.from(a)), false);
+    }
+
+    /**
+     * Inline preview for PDF, JPEG and PNG. The browser still needs the Authorization header, so the app fetches
+     * this as a blob and renders it from a short-lived object URL rather than linking to it directly.
+     */
+    @PreAuthorize("hasAuthority('DOCUMENT_READ')")
+    @GetMapping("/documents/{id}/versions/{versionNo}/preview")
+    public ResponseEntity<Resource> preview(@PathVariable UUID id, @PathVariable int versionNo, Authentication a) {
+        return fileResponse(service.preview(id, versionNo, CurrentActor.from(a)), true);
+    }
+
+    /** Shared file response so download and preview keep identical security headers. */
+    private static ResponseEntity<Resource> fileResponse(UploadedFile.Download file, boolean inline) {
+        ContentDisposition disposition = (inline ? ContentDisposition.inline() : ContentDisposition.attachment())
+                .filename(file.filename(), StandardCharsets.UTF_8)
+                .build();
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(file.contentType()))
                 .contentLength(file.size())
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(file.filename(), StandardCharsets.UTF_8).build().toString())
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(file.resource());

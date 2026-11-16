@@ -4,6 +4,7 @@ import { useAppDispatch } from '../../app/hooks'
 import { addToast } from '../../app/toastsSlice'
 import {
   generatePayments,
+  downloadPaymentReceipt,
   getPaymentEvents,
   getPaymentSummary,
   getPayments,
@@ -11,6 +12,7 @@ import {
   releasePayment,
   simulatePayment,
 } from '../../api/compensation'
+import type { SimulatedPaymentChannel } from '../../api/compensation'
 import { toApiErrorInfo, type ApiErrorInfo } from '../../api/errors'
 import type {
   CaseResponse,
@@ -30,6 +32,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { Textarea } from '../../components/ui/Textarea'
 import { useApiMutation } from '../../hooks/useApiMutation'
 import { useApiQuery } from '../../hooks/useApiQuery'
+import { saveBlob } from '../../utils/download'
 import {
   formatDateTime,
   formatMoney,
@@ -61,8 +64,11 @@ export function PaymentsTab({
   const [busyPaymentId, setBusyPaymentId] = useState<string | null>(null)
   const [failureTarget, setFailureTarget] = useState<PaymentResponse | null>(null)
   const [generatingValuationId, setGeneratingValuationId] = useState<string | null>(null)
+  const [paymentChannel, setPaymentChannel] =
+    useState<SimulatedPaymentChannel>('OTHER_SIMULATED')
   const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [receiptPaymentId, setReceiptPaymentId] = useState<string | null>(null)
   const failureMutation = useApiMutation<PaymentResponse>()
 
   const paymentsQuery = useApiQuery(
@@ -96,7 +102,7 @@ export function PaymentsTab({
     setGeneratingValuationId(valuation.id)
     setActionError(null)
     try {
-      await generatePayments(valuation.id)
+      await generatePayments(valuation.id, paymentChannel)
       dispatch(
         addToast({
           variant: 'success',
@@ -148,6 +154,28 @@ export function PaymentsTab({
     }
   }
 
+  async function downloadReceipt(payment: PaymentResponse) {
+    if (receiptPaymentId) {
+      return
+    }
+    setReceiptPaymentId(payment.id)
+    setActionError(null)
+    try {
+      const blob = await downloadPaymentReceipt(payment.id)
+      saveBlob(blob, `nlams-simulated-payment-${payment.id}.txt`)
+      dispatch(
+        addToast({
+          variant: 'success',
+          message: 'DEMO / SIMULATED payment receipt downloaded.',
+        }),
+      )
+    } catch (caught) {
+      setActionError(toApiErrorInfo(caught).message)
+    } finally {
+      setReceiptPaymentId(null)
+    }
+  }
+
   const columns: TableColumn<PaymentResponse>[] = [
     {
       key: 'beneficiary',
@@ -157,6 +185,17 @@ export function PaymentsTab({
           landownerId={payment.landownerId}
           canReadLandowners={canReadLandowners}
         />
+      ),
+    },
+    {
+      key: 'channel',
+      header: 'Simulated rail',
+      render: (payment) => (
+        <Badge variant="info">
+          {payment.paymentChannel === 'UNCLASSIFIED'
+            ? 'Legacy · unclassified'
+            : payment.paymentChannel.replace('_SIMULATED', '') + ' · simulated'}
+        </Badge>
       ),
     },
     {
@@ -239,6 +278,17 @@ export function PaymentsTab({
               {PAYMENT_ACTION_LABELS[action]}
             </Button>
           ))}
+          {payment.status === 'CONFIRMED' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              isLoading={receiptPaymentId === payment.id}
+              disabled={Boolean(receiptPaymentId && receiptPaymentId !== payment.id)}
+              onClick={() => void downloadReceipt(payment)}
+            >
+              DEMO receipt
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="ghost"
@@ -265,17 +315,30 @@ export function PaymentsTab({
       key: 'history',
       header: 'History',
       render: (payment) => (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() =>
-            setExpandedPaymentId((current) =>
-              current === payment.id ? null : payment.id,
-            )
-          }
-        >
-          {expandedPaymentId === payment.id ? 'Hide history' : 'Show history'}
-        </Button>
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              setExpandedPaymentId((current) =>
+                current === payment.id ? null : payment.id,
+              )
+            }
+          >
+            {expandedPaymentId === payment.id ? 'Hide history' : 'Show history'}
+          </Button>
+          {payment.status === 'CONFIRMED' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              isLoading={receiptPaymentId === payment.id}
+              disabled={Boolean(receiptPaymentId && receiptPaymentId !== payment.id)}
+              onClick={() => void downloadReceipt(payment)}
+            >
+              DEMO receipt
+            </Button>
+          ) : null}
+        </div>
       ),
     })
   }
@@ -417,6 +480,32 @@ export function PaymentsTab({
             ) : null}
           </div>
         )}
+        {canRelease && approvedValuations.some((valuation) => !valuationIdsWithPayments.has(valuation.id)) ? (
+          <label className="mb-3 block max-w-sm text-sm font-medium text-slate-700">
+            Simulated payment channel
+            <select
+              value={paymentChannel}
+              onChange={(event) => {
+                const next = event.target.value
+                if (
+                  next === 'PFMS_SIMULATED' ||
+                  next === 'DBT_SIMULATED' ||
+                  next === 'OTHER_SIMULATED'
+                ) {
+                  setPaymentChannel(next)
+                }
+              }}
+              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2"
+            >
+              <option value="OTHER_SIMULATED">Other (simulated)</option>
+              <option value="PFMS_SIMULATED">PFMS (simulated only)</option>
+              <option value="DBT_SIMULATED">DBT (simulated only)</option>
+            </select>
+            <span className="mt-1 block text-xs font-normal text-slate-500">
+              This is a reporting classification only; no PFMS/DBT service or money transfer is used.
+            </span>
+          </label>
+        ) : null}
       </Card>
 
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">

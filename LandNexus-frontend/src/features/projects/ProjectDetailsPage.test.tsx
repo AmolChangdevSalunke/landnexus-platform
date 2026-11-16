@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { ProjectDetailsPage } from './ProjectDetailsPage'
@@ -203,5 +204,73 @@ describe('ProjectDetailsPage', () => {
       'href',
       '/projects',
     )
+  })
+
+  it('lets a project manager close and reopen the project', async () => {
+    let status: 'ACTIVE' | 'CLOSED' = 'ACTIVE'
+    const manageAuth = {
+      ...AUTH,
+      user: {
+        ...USER,
+        permissions: [...USER.permissions, 'PROJECT_MANAGE'],
+      },
+    }
+
+    server.use(
+      http.get(`${API_BASE_URL}/administration/my-districts`, () =>
+        HttpResponse.json(page([DISTRICT])),
+      ),
+      http.get(`${API_BASE_URL}/administration/states`, () =>
+        HttpResponse.json(page([STATE])),
+      ),
+      http.get(`${API_BASE_URL}/administration/departments`, () =>
+        HttpResponse.json(page([DEPARTMENT])),
+      ),
+      http.get(`${API_BASE_URL}/administration/talukas`, () =>
+        HttpResponse.json(page([TALUKA])),
+      ),
+      http.get(`${API_BASE_URL}/administration/villages`, () =>
+        HttpResponse.json(page([VILLAGE])),
+      ),
+      http.get(`${API_BASE_URL}/projects/${PROJECT.id}`, () =>
+        HttpResponse.json({ ...PROJECT, status }),
+      ),
+      http.post(`${API_BASE_URL}/projects/${PROJECT.id}/close`, () => {
+        status = 'CLOSED'
+        return HttpResponse.json({ ...PROJECT, status })
+      }),
+      http.post(`${API_BASE_URL}/projects/${PROJECT.id}/reopen`, () => {
+        status = 'ACTIVE'
+        return HttpResponse.json({ ...PROJECT, status })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:id" element={<ProjectDetailsPage />} />
+      </Routes>,
+      { auth: manageAuth, initialEntries: [`/projects/${PROJECT.id}`] },
+    )
+
+    expect(await screen.findByRole('link', { name: 'Edit project' })).toHaveAttribute(
+      'href',
+      `/projects/${PROJECT.id}/edit`,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Close project' }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close project' }),
+    )
+
+    expect(await screen.findByRole('button', { name: 'Reopen project' })).toBeInTheDocument()
+    expect(screen.getByText('Project closed')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Reopen project' }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Reopen project' }),
+    )
+
+    expect(await screen.findByRole('button', { name: 'Close project' })).toBeInTheDocument()
   })
 })

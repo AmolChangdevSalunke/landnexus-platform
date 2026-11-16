@@ -259,6 +259,41 @@ describe('UsersPage', () => {
     expect(receivedBody).toEqual({ roles: ['AUDITOR'] })
   })
 
+  it('updates profile details through the user API', async () => {
+    const user = userEvent.setup()
+    let receivedBody: unknown = null
+
+    useDefaultHandlers()
+    server.use(
+      http.put(`${API_BASE_URL}/administration/users/:id`, async ({ params, request }) => {
+        expect(String(params.id)).toBe(ALICE.id)
+        receivedBody = await request.json()
+        return HttpResponse.json({
+          ...ALICE,
+          fullName: 'Alice Updated',
+          email: 'alice.updated@example.gov.in',
+        })
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('Alice Admin')
+    await user.click(within(rowFor('Alice Admin')).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    const name = within(dialog).getByLabelText(/Full name/)
+    const email = within(dialog).getByLabelText(/Email/)
+    await user.clear(name)
+    await user.type(name, 'Alice Updated')
+    await user.clear(email)
+    await user.type(email, 'alice.updated@example.gov.in')
+    await user.click(within(dialog).getByRole('button', { name: 'Save profile' }))
+
+    await waitFor(() => expect(receivedBody).toEqual({
+      fullName: 'Alice Updated',
+      email: 'alice.updated@example.gov.in',
+    }))
+  })
+
   it('adds a state to the geographic scope and saves the full list', async () => {
     const user = userEvent.setup()
     let receivedBody: unknown = null

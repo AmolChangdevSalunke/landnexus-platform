@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { KeyRound, MapPinned, Plus, UserCog } from 'lucide-react'
+import { History, KeyRound, MapPinned, Pencil, Plus, ShieldCheck, UserCog } from 'lucide-react'
 import { useAppDispatch } from '../../../app/hooks'
 import { addToast } from '../../../app/toastsSlice'
-import { getRoles, getUsers, setUserEnabled } from '../../../api/admin'
+import { getRoles, getUserPermissions, getUsers, setUserEnabled, updateUserPermissions } from '../../../api/admin'
 import type { UserResponse } from '../../../api/types'
 import { PageHeader } from '../../../components/layout/PageHeader'
 import { Alert } from '../../../components/ui/Alert'
@@ -18,13 +18,18 @@ import { formatDateTime } from '../../../utils/format'
 import { PERMISSION } from '../../../utils/permissions'
 import { useAuth } from '../../auth/useAuth'
 import { UserCreateForm } from './UserCreateForm'
+import { UserProfileForm } from './UserProfileForm'
 import { UserRolesForm } from './UserRolesForm'
 import { UserScopesDialog } from './UserScopesDialog'
+import { UserPermissionsForm } from './UserPermissionsForm'
+import { UserActivityDialog } from './UserActivityDialog'
 
 type EditorState =
   | { mode: 'create' }
+  | { mode: 'profile'; user: UserResponse }
   | { mode: 'roles'; user: UserResponse }
   | { mode: 'scopes'; user: UserResponse }
+  | { mode: 'permissions'; user: UserResponse }
   | null
 
 export function UsersPage() {
@@ -32,12 +37,14 @@ export function UsersPage() {
   const { user: currentUser, can, hasRole } = useAuth()
   const canWrite = can(PERMISSION.USER_WRITE)
   const canReadMaster = can(PERMISSION.MASTER_DATA_READ)
+  const canAudit = can(PERMISSION.AUDIT_READ)
   const isSuperAdmin = hasRole('SUPER_ADMIN')
 
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(20)
   const [editor, setEditor] = useState<EditorState>(null)
   const [statusTarget, setStatusTarget] = useState<UserResponse | null>(null)
+  const [activityTarget, setActivityTarget] = useState<UserResponse | null>(null)
   const statusMutation = useApiMutation<UserResponse>()
 
   const usersQuery = useApiQuery(() => getUsers(page, size), [page, size])
@@ -164,6 +171,16 @@ export function UsersPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setEditor({ mode: 'profile', user })}
+              disabled={!manageable}
+              title={blockedTitle}
+              leftIcon={<Pencil aria-hidden="true" className="h-4 w-4" />}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setEditor({ mode: 'roles', user })}
               disabled={!manageable}
               title={blockedTitle}
@@ -171,6 +188,18 @@ export function UsersPage() {
             >
               Roles
             </Button>
+            {isSuperAdmin ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditor({ mode: 'permissions', user })}
+                disabled={user.roles.includes('SUPER_ADMIN')}
+                title={user.roles.includes('SUPER_ADMIN') ? 'Super administrator permissions are protected.' : undefined}
+                leftIcon={<ShieldCheck aria-hidden="true" className="h-4 w-4" />}
+              >
+                Permissions
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"
@@ -198,6 +227,24 @@ export function UsersPage() {
           </div>
         )
       },
+    })
+  }
+
+  if (canAudit) {
+    columns.push({
+      key: 'activity',
+      header: 'History',
+      className: 'text-right',
+      render: (user) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setActivityTarget(user)}
+          leftIcon={<History aria-hidden="true" className="h-4 w-4" />}
+        >
+          Activity
+        </Button>
+      ),
     })
   }
 
@@ -309,6 +356,17 @@ export function UsersPage() {
         />
       ) : null}
 
+      {editor?.mode === 'profile' ? (
+        <UserProfileForm
+          user={editor.user}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null)
+            usersQuery.reload()
+          }}
+        />
+      ) : null}
+
       {editor?.mode === 'roles' ? (
         <UserRolesForm
           user={editor.user}
@@ -333,6 +391,23 @@ export function UsersPage() {
             usersQuery.reload()
           }}
         />
+      ) : null}
+
+      {editor?.mode === 'permissions' ? (
+        <UserPermissionsForm
+          user={editor.user}
+          load={getUserPermissions}
+          save={(id, overrides) => updateUserPermissions(id, { overrides })}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null)
+            usersQuery.reload()
+          }}
+        />
+      ) : null}
+
+      {activityTarget ? (
+        <UserActivityDialog user={activityTarget} onClose={() => setActivityTarget(null)} />
       ) : null}
 
       {statusTarget ? (

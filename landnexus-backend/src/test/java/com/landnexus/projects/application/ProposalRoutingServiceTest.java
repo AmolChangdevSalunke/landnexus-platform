@@ -198,9 +198,13 @@ class ProposalRoutingServiceTest {
 
         assertThat(targeted).isTrue();
         assertThat(open.getStatus()).isEqualTo(ProposalAssignment.REASSIGNED);
+        // The reassignment must be flushed before the replacement insert: a partial unique index allows only
+        // one open assignment per proposal/stage, so a deferred UPDATE would collide with the INSERT.
+        org.mockito.InOrder ordering = org.mockito.Mockito.inOrder(assignments);
+        ordering.verify(assignments).saveAndFlush(open);
         ArgumentCaptor<ProposalAssignment> saved = ArgumentCaptor.forClass(ProposalAssignment.class);
-        verify(assignments, org.mockito.Mockito.times(3)).save(saved.capture());
-        ProposalAssignment replacement = saved.getAllValues().get(2);
+        ordering.verify(assignments, org.mockito.Mockito.times(2)).save(saved.capture());
+        ProposalAssignment replacement = saved.getAllValues().get(0);
         assertThat(replacement.getAssignedUserId()).isEqualTo(officerId);
         assertThat(replacement.getStatus()).isEqualTo(ProposalAssignment.IN_PROGRESS);
         verify(audit).record(eq("REASSIGN"), eq("Proposal"), eq(proposalId), anyString());

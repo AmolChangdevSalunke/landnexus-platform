@@ -1,10 +1,11 @@
 package com.landnexus.projects.api.dto;
 
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 /** Routing records. User ids and proposal references only: no personal data. */
 public final class AssignmentDtos {
@@ -24,6 +25,10 @@ public final class AssignmentDtos {
                                  String districtName, String projectType) {
     }
 
-    public record ReassignRequest(@NotNull UUID userId, @Size(max = 500) String reason) {
+    public record ReassignmentRequest(@NotNull UUID assignedUserId,
+                                      @NotBlank @Size(max = 250) String reason) {
+    }
+
+    public record ReassignmentCandidate(UUID id, String username, String scopeLevel) {
     }
 }

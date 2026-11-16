@@ -70,6 +70,24 @@ const MAP_ONLY_USER = {
   permissions: ['MASTER_DATA_READ'],
 }
 
+const GIS_USER = {
+  ...TEST_USER,
+  roles: ['DISTRICT_ADMIN'],
+  permissions: ['MASTER_DATA_READ', 'GIS_READ', 'PROPOSAL_READ_OWN'],
+}
+
+const GIS_WRITER = {
+  ...TEST_USER,
+  roles: ['DISTRICT_ADMIN'],
+  permissions: [
+    'MASTER_DATA_READ',
+    'GIS_READ',
+    'GIS_WRITE',
+    'LAND_RECORD_READ',
+    'PROPOSAL_READ_OWN',
+  ],
+}
+
 function auth(user: typeof TEST_USER) {
   return {
     user,
@@ -139,6 +157,156 @@ describe('GisMapPage', () => {
         { timeout: 5000 },
       ),
     ).toBeInTheDocument()
+  })
+
+  it('renders the interactive OpenStreetMap and backend GIS feature layers', async () => {
+    mockReferences()
+    server.use(
+      http.get(`${API_BASE_URL}/projects`, () => HttpResponse.json(page([PROJECT]))),
+      http.get(`${API_BASE_URL}/gis/imagery/status`, () =>
+        HttpResponse.json({
+          enabled: false,
+          provider: 'ISRO Bhuvan',
+          kind: 'WMS',
+          overlayAvailable: false,
+          attribution: null,
+          message: 'Not configured',
+        }),
+      ),
+      http.get(`${API_BASE_URL}/gis/projects/${PROJECT.id}/map`, () =>
+        HttpResponse.json({
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[[73.8, 18.5], [73.81, 18.5], [73.81, 18.51], [73.8, 18.5]]],
+              },
+              properties: {
+                kind: 'PARCEL',
+                parcelId: 'parcel-1',
+                gatNumber: 'DEMO-101',
+                surveyNumber: null,
+                classification: 'AGRICULTURAL',
+                landUse: 'AGRICULTURE',
+                areaHa: 1.2,
+                inCase: true,
+              },
+            },
+          ],
+        }),
+      ),
+    )
+
+    renderWithProviders(<GisMapPage />, { auth: auth(GIS_USER) })
+
+    expect(await screen.findByRole('application', {
+      name: 'OpenStreetMap with NLAMS spatial layers',
+    })).toBeInTheDocument()
+    expect(await screen.findByText('GIS DATA LAYERS ACTIVE')).toBeInTheDocument()
+    expect(screen.getByText('BHUVAN UNAVAILABLE - OSM FALLBACK ACTIVE')).toBeInTheDocument()
+  })
+
+  it('uploads a polygon to the scoped PostGIS parcel boundary API', async () => {
+    const user = userEvent.setup()
+    const talukaId = '77777777-7777-7777-7777-777777777777'
+    const villageId = '88888888-8888-8888-8888-888888888888'
+    const parcelId = '99999999-9999-9999-9999-999999999999'
+    let uploadedGeometry: unknown = null
+
+    mockReferences()
+    server.use(
+      http.get(`${API_BASE_URL}/projects`, () => HttpResponse.json(page([PROJECT]))),
+      http.get(`${API_BASE_URL}/administration/talukas`, () =>
+        HttpResponse.json(page([{
+          id: talukaId,
+          code: 'DEMO-TALUKA',
+          name: 'Demo Taluka',
+          status: 'ACTIVE',
+          districtId: DISTRICT.id,
+          districtName: DISTRICT.name,
+        }])),
+      ),
+      http.get(`${API_BASE_URL}/administration/villages`, () =>
+        HttpResponse.json(page([{
+          id: villageId,
+          code: 'DEMO-VILLAGE',
+          name: 'Demo Village',
+          status: 'ACTIVE',
+          talukaId,
+          talukaName: 'Demo Taluka',
+        }])),
+      ),
+      http.get(`${API_BASE_URL}/land-records/parcels`, () =>
+        HttpResponse.json(page([{
+          id: parcelId,
+          stateId: STATE.id,
+          districtId: DISTRICT.id,
+          talukaId,
+          villageId,
+          gatNumber: 'DEMO-GAT-1',
+          surveyNumber: null,
+          subdivisionNumber: null,
+          areaHa: 1.5,
+          classification: 'AGRICULTURAL',
+          landUse: 'AGRICULTURE',
+          status: 'ACTIVE',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        }])),
+      ),
+      http.get(`${API_BASE_URL}/gis/imagery/status`, () =>
+        HttpResponse.json({
+          enabled: false,
+          provider: 'ISRO Bhuvan',
+          kind: 'WMS',
+          overlayAvailable: false,
+          attribution: '',
+          message: 'Not configured',
+        }),
+      ),
+      http.get(`${API_BASE_URL}/gis/projects/${PROJECT.id}/map`, () =>
+        HttpResponse.json({ type: 'FeatureCollection', features: [] }),
+      ),
+      http.get(`${API_BASE_URL}/gis/villages/${villageId}/parcels`, () =>
+        HttpResponse.json({ type: 'FeatureCollection', features: [] }),
+      ),
+      http.put(`${API_BASE_URL}/gis/parcels/${parcelId}/boundary`, async ({ request }) => {
+        uploadedGeometry = await request.json()
+        return HttpResponse.json({
+          parcelId,
+          versionNo: 1,
+          areaHa: 1.2,
+          recordedAreaHa: 1.5,
+          variancePercent: -20,
+          vertices: 5,
+        })
+      }),
+    )
+
+    renderWithProviders(<GisMapPage />, { auth: auth(GIS_WRITER) })
+    await user.selectOptions(await screen.findByLabelText('Land district (parcel lookup)'), DISTRICT.id)
+    await user.selectOptions(await screen.findByLabelText('Taluka'), talukaId)
+    await user.selectOptions(await screen.findByLabelText('Village / parcel layer'), villageId)
+    await user.upload(
+      screen.getByLabelText('Upload GeoJSON'),
+      new File([JSON.stringify({
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[[73.8, 18.5], [73.81, 18.5], [73.81, 18.51], [73.8, 18.5]]],
+        },
+        properties: {},
+      })], 'parcel.geojson', { type: 'application/geo+json' }),
+    )
+    await user.selectOptions(await screen.findByLabelText('Parcel boundary target'), parcelId)
+    await user.click(await screen.findByRole('button', { name: 'Save selected geometry to PostGIS' }))
+
+    await waitFor(() => {
+      expect(uploadedGeometry).toMatchObject({ type: 'Polygon' })
+    })
+    expect(await screen.findByText(/Geometry saved to PostGIS/)).toBeInTheDocument()
   })
 
   it('asks the backend for one district when the filter changes', async () => {

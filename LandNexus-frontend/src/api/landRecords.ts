@@ -311,6 +311,32 @@ export async function downloadDocumentVersion(
   }
 }
 
+/**
+ * Fetches one version for inline display. The response is still an authenticated
+ * blob; callers render it from a temporary object URL and must revoke that URL.
+ */
+export async function previewDocumentVersion(
+  documentId: string,
+  versionNo: number,
+  fallbackFilename = 'document',
+): Promise<{ blob: Blob; filename: string; contentType: string }> {
+  const response = await apiClient.get<Blob>(
+    `/land-records/documents/${documentId}/versions/${versionNo}/preview`,
+    { responseType: 'blob' },
+  )
+
+  return {
+    blob: response.data,
+    filename: filenameFromDisposition(
+      response.headers['content-disposition'] as string | undefined,
+      fallbackFilename,
+    ),
+    contentType:
+      (response.headers['content-type'] as string | undefined)?.split(';')[0] ??
+      'application/octet-stream',
+  }
+}
+
 export async function verifyDocument(
   id: string,
   remarks?: string,

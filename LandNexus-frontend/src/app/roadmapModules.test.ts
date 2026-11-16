@@ -23,11 +23,11 @@ describe('platform module catalogue', () => {
     expect(routes).toContain('/land/documents')
     expect(routes).toContain('/monitoring')
     expect(routes).toContain('/notifications')
+    expect(routes).toContain('/admin/routing-rules')
   })
 
   it('keeps only genuinely missing capabilities on the roadmap', () => {
     expect(Object.keys(ROADMAP_MODULES)).toEqual([
-      'routing-rules',
       'notification-settings',
       'pfms-dbt',
       'isro-bhuvan',
@@ -51,7 +51,7 @@ describe('platform module catalogue', () => {
   })
 
   it('provides a default roadmap entry for the legacy /roadmap redirect', () => {
-    expect(DEFAULT_ROADMAP_KEY).toBe('routing-rules')
+    expect(DEFAULT_ROADMAP_KEY).toBe('notification-settings')
     expect(ROADMAP_MODULES[DEFAULT_ROADMAP_KEY]).toBeDefined()
   })
 })

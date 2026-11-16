@@ -27,11 +27,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.context.WebApplicationContext;
 
 /** Real database with PostGIS, real filter chain, real tokens. Synthetic DEMO shapes only. */
 @SpringBootTest
-class GisIntegrationTest {
+@ActiveProfiles("integration")
+class GisIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String ADMIN = "/api/v1/administration";

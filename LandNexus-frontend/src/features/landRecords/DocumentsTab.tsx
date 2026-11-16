@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Download, FileUp, PlusCircle, ShieldCheck, XCircle } from 'lucide-react'
+import { Download, Eye, FileUp, PlusCircle, ShieldCheck, XCircle } from 'lucide-react'
 import { useAppDispatch } from '../../app/hooks'
 import { addToast } from '../../app/toastsSlice'
 import {
@@ -34,6 +34,7 @@ import { saveBlob } from '../../utils/download'
 import { formatDateTime } from '../../utils/format'
 import { PERMISSION } from '../../utils/permissions'
 import { useAuth } from '../auth/useAuth'
+import { DocumentPreviewDialog, isPreviewable } from './DocumentPreviewDialog'
 import {
   DOCUMENT_CATEGORY_LABELS,
   VERIFICATION_STATUS_LABELS,
@@ -56,6 +57,10 @@ export function DocumentsTab({ parcel }: { parcel: ParcelResponse }) {
     outcome: 'VERIFIED' | 'REJECTED'
   } | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [previewTarget, setPreviewTarget] = useState<{
+    document: DocumentResponse
+    version: DocumentVersion
+  } | null>(null)
 
   const canUpload = can(PERMISSION.DOCUMENT_UPLOAD) && parcel.status === 'ACTIVE'
   const canVerify = can(PERMISSION.DOCUMENT_VERIFY)
@@ -212,6 +217,16 @@ export function DocumentsTab({ parcel }: { parcel: ParcelResponse }) {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    {current && isPreviewable(current.contentType) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPreviewTarget({ document, version: current })}
+                        leftIcon={<Eye aria-hidden="true" className="h-3.5 w-3.5" />}
+                      >
+                        Preview
+                      </Button>
+                    ) : null}
                     {current ? (
                       <Button
                         variant="outline"
@@ -287,14 +302,29 @@ export function DocumentsTab({ parcel }: { parcel: ParcelResponse }) {
                                 SHA-256 {version.sha256}
                               </p>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              isLoading={downloading === `${document.id}:${version.versionNo}`}
-                              onClick={() => void download(document, version)}
-                            >
-                              Download v{version.versionNo}
-                            </Button>
+                            <div className="flex flex-wrap gap-1">
+                              {isPreviewable(version.contentType) ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setPreviewTarget({ document, version })
+                                  }
+                                >
+                                  Preview v{version.versionNo}
+                                </Button>
+                              ) : null}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                isLoading={
+                                  downloading === `${document.id}:${version.versionNo}`
+                                }
+                                onClick={() => void download(document, version)}
+                              >
+                                Download v{version.versionNo}
+                              </Button>
+                            </div>
                           </li>
                         ))}
                     </ul>
@@ -314,6 +344,14 @@ export function DocumentsTab({ parcel }: { parcel: ParcelResponse }) {
             setUploadOpen(false)
             query.reload()
           }}
+        />
+      ) : null}
+
+      {previewTarget ? (
+        <DocumentPreviewDialog
+          documentId={previewTarget.document.id}
+          version={previewTarget.version}
+          onClose={() => setPreviewTarget(null)}
         />
       ) : null}
 

@@ -167,6 +167,12 @@ export const NAV_GROUPS: NavGroup[] = [
         permissions: [PERMISSION.USER_READ],
       },
       {
+        label: 'Workflow routing rules',
+        to: '/admin/routing-rules',
+        icon: Route,
+        permissions: [PERMISSION.ROUTING_RULE_READ],
+      },
+      {
         label: 'Audit trail',
         to: '/admin/audit',
         icon: ClipboardList,

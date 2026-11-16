@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import {
   Banknote,
   CheckCircle2,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { Dashboard, DistrictRow } from '../../api/types'
 import { getDashboard } from '../../api/monitoring'
+import { getProjects } from '../../api/projects'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
@@ -23,9 +24,11 @@ import { Card } from '../../components/ui/Card'
 import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { LinkButton } from '../../components/ui/LinkButton'
+import { Select } from '../../components/ui/Select'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useApiQuery } from '../../hooks/useApiQuery'
 import { usePagination } from '../../hooks/usePagination'
+import { useReferenceNames } from '../../hooks/useReferenceNames'
 import { POLL_INTERVAL_MS, useVisibilityPolling } from '../../hooks/useVisibilityPolling'
 import { PERMISSION } from '../../utils/permissions'
 import {
@@ -63,11 +66,21 @@ const TrendChart = lazy(() =>
 export function DashboardPage() {
   const { can } = useAuth()
   const canRead = can(PERMISSION.DASHBOARD_READ)
+  const canReadProjects = can(PERMISSION.PROPOSAL_READ) || can(PERMISSION.PROPOSAL_READ_OWN)
   const scope = useMonitoringScope()
+  const [dimensions, setDimensions] = useState({
+    projectId: '', talukaId: '', fromDate: '', toDate: '',
+    proposalStatus: '', projectStatus: '', acquisitionStatus: '',
+  })
+
+  useEffect(() => {
+    setDimensions((current) => ({ ...current, projectId: '', talukaId: '' }))
+  }, [scope.stateId, scope.districtId])
 
   const { data, error, isLoading, reload } = useApiQuery(
-    () => getDashboard({ stateId: scope.stateId, districtId: scope.districtId }),
-    [scope.stateId, scope.districtId],
+    () => getDashboard({ stateId: scope.stateId, districtId: scope.districtId, ...dimensions }),
+    [scope.stateId, scope.districtId, dimensions.projectId, dimensions.talukaId, dimensions.fromDate,
+      dimensions.toDate, dimensions.proposalStatus, dimensions.projectStatus, dimensions.acquisitionStatus],
     canRead,
   )
 
@@ -102,7 +115,14 @@ export function DashboardPage() {
       />
 
       <MonitoringTabs />
-      <MonitoringFilters scope={scope} />
+      <MonitoringFilters scope={scope}>
+        <DashboardDimensionFilters
+          districtId={scope.districtId}
+          value={dimensions}
+          onChange={setDimensions}
+          canReadProjects={canReadProjects}
+        />
+      </MonitoringFilters>
 
       {isLoading && !data ? (
         <DashboardSkeleton />
@@ -138,6 +158,108 @@ export function DashboardPage() {
   )
 }
 
+type DashboardDimensions = {
+  projectId: string
+  talukaId: string
+  fromDate: string
+  toDate: string
+  proposalStatus: string
+  projectStatus: string
+  acquisitionStatus: string
+}
+
+function DashboardDimensionFilters({
+  districtId,
+  value,
+  onChange,
+  canReadProjects,
+}: {
+  districtId: string
+  value: DashboardDimensions
+  onChange: (value: DashboardDimensions) => void
+  canReadProjects: boolean
+}) {
+  const refs = useReferenceNames()
+  const projectsQuery = useApiQuery(
+    () => getProjects({ districtId: districtId || undefined, page: 0, size: 100 }),
+    [districtId],
+    canReadProjects,
+  )
+
+  useEffect(() => {
+    if (districtId && refs.enabled) {
+      void refs.ensureDistrictVillages(districtId)
+    }
+  }, [districtId, refs.enabled, refs.ensureDistrictVillages])
+
+  const update = (key: keyof DashboardDimensions, next: string) => {
+    onChange({ ...value, [key]: next })
+  }
+
+  return (
+    <>
+      {canReadProjects ? (
+        <Select label="Project" value={value.projectId} onChange={(event) => update('projectId', event.target.value)}>
+          <option value="">All projects in scope</option>
+          {(projectsQuery.data?.content ?? []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.code} · {project.title}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+      {districtId && refs.enabled ? (
+        <Select label="Taluka" value={value.talukaId} onChange={(event) => update('talukaId', event.target.value)}>
+          <option value="">All talukas in district</option>
+          {refs.talukasForDistrict(districtId).map((taluka) => (
+            <option key={taluka.id} value={taluka.id}>
+              {taluka.name}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+      <label className="block text-sm font-medium text-slate-700">
+        From date
+        <input
+          type="date"
+          value={value.fromDate}
+          onChange={(event) => update('fromDate', event.target.value)}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </label>
+      <label className="block text-sm font-medium text-slate-700">
+        To date
+        <input
+          type="date"
+          value={value.toDate}
+          onChange={(event) => update('toDate', event.target.value)}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </label>
+      <Select label="Proposal status" value={value.proposalStatus} onChange={(event) => update('proposalStatus', event.target.value)}>
+        <option value="">All proposal statuses</option>
+        {['DRAFT', 'SUBMITTED', 'UNDER_SCRUTINY', 'CLARIFICATION_REQUESTED', 'RECOMMENDED', 'APPROVED', 'REJECTED'].map((status) =>
+          <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
+      </Select>
+      <Select label="Project status" value={value.projectStatus} onChange={(event) => update('projectStatus', event.target.value)}>
+        <option value="">All project statuses</option>
+        {['ACTIVE', 'CLOSED'].map((status) => <option key={status} value={status}>{status}</option>)}
+      </Select>
+      <Select label="Acquisition status" value={value.acquisitionStatus} onChange={(event) => update('acquisitionStatus', event.target.value)}>
+        <option value="">All acquisition statuses</option>
+        {['INITIATED', 'SURVEY_IN_PROGRESS', 'VERIFICATION_COMPLETE', 'NOTIFICATION_ISSUED', 'READY_FOR_AWARD', 'AWARD_DECLARED', 'POSSESSION_TAKEN', 'CLOSED', 'CANCELLED'].map((status) =>
+          <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
+      </Select>
+      {projectsQuery.error ? (
+        <p role="status" className="text-xs text-danger-700">Project choices unavailable: {projectsQuery.error.message}</p>
+      ) : null}
+      {refs.error ? (
+        <p role="status" className="text-xs text-danger-700">Taluka choices unavailable: {refs.error.message}</p>
+      ) : null}
+    </>
+  )
+}
+
 function DashboardSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading dashboard">
@@ -150,6 +272,7 @@ function DashboardSkeleton() {
           </Card>
         ))}
       </KpiGrid>
+
       <Card className="p-5">
         <Skeleton className="h-4 w-40" />
         <Skeleton className="mt-4 h-64 w-full" />
@@ -216,6 +339,79 @@ function DashboardBody({
           unavailable
         />
       </KpiGrid>
+
+      {finance?.paymentsByChannel ? (
+        <Card className="mb-5 p-5">
+          <h2 className="text-base font-semibold text-navy-900">Payment channel analytics</h2>
+          <p className="mt-1 text-xs text-slate-600">All amounts are simulated; PFMS/DBT labels do not indicate external service connectivity.</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr><th className="py-2 pr-4">Channel</th><th className="py-2 pr-4">Status</th><th className="py-2 pr-4">Payments</th><th className="py-2">Amount (INR)</th></tr>
+              </thead>
+              <tbody>
+                {Object.entries(finance.paymentsByChannel).flatMap(([channel, rows]) =>
+                  rows.map((row) => (
+                    <tr key={`${channel}-${row.status}`} className="border-t border-slate-100">
+                      <td className="py-2 pr-4">{channel.replace('_SIMULATED', '').replace('_', ' ')}{channel.includes('SIMULATED') ? ' · simulated' : ''}</td>
+                      <td className="py-2 pr-4">{row.status}</td>
+                      <td className="py-2 pr-4">{formatNumber(row.count)}</td>
+                      <td className="py-2">{formatMoney(row.amount)}</td>
+                    </tr>
+                  )))}
+                {Object.values(finance.paymentsByChannel).every((rows) => rows.length === 0) ? (
+                  <tr><td className="py-3 text-slate-500" colSpan={4}>No payment records in this scope and filter.</td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
+
+      <Card className="mb-5 p-5">
+        <h2 className="text-base font-semibold text-navy-900">Operational workload and alerts</h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-sm text-slate-500">GIS conflict parcels</dt>
+            <dd className="mt-1 text-lg font-semibold text-navy-900">{formatNumber(data.operations.gisConflicts)}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-slate-500">Pending assigned tasks</dt>
+            <dd className="mt-1 text-lg font-semibold text-navy-900">{formatNumber(data.operations.pendingTasks)}</dd>
+          </div>
+          {Object.entries(data.operations.escalationsByLevel).map(([level, count]) => (
+            <div key={level}>
+              <dt className="text-sm text-slate-500">{level} escalations</dt>
+              <dd className="mt-1 text-lg font-semibold text-navy-900">{formatNumber(count)}</dd>
+            </div>
+          ))}
+        </dl>
+        {data.operations.officerWorkload ? (
+          <div className="mt-5 overflow-x-auto">
+            <h3 className="text-sm font-semibold text-navy-900">Officer workload</h3>
+            <table className="mt-2 min-w-full text-left text-sm">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr><th className="py-2 pr-4">Officer</th><th className="py-2 pr-4">Pending</th><th className="py-2 pr-4">In progress</th><th className="py-2">Overdue</th></tr>
+              </thead>
+              <tbody>
+                {data.operations.officerWorkload.map((officer) => (
+                  <tr key={officer.userId} className="border-t border-slate-100">
+                    <td className="py-2 pr-4 font-medium">{officer.username}</td>
+                    <td className="py-2 pr-4">{formatNumber(officer.pending)}</td>
+                    <td className="py-2 pr-4">{formatNumber(officer.inProgress)}</td>
+                    <td className="py-2">{formatNumber(officer.overdue)}</td>
+                  </tr>
+                ))}
+                {data.operations.officerWorkload.length === 0 ? (
+                  <tr><td className="py-3 text-slate-500" colSpan={4}>No open assignments in this scope.</td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-slate-500">Officer names and workload require user-read permission.</p>
+        )}
+      </Card>
 
       <KpiGrid>
         <KpiCard

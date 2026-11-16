@@ -49,14 +49,19 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The proposal use cases. Every state change goes through the workflow table in ProposalWorkflow;
  * this class adds the rules the table cannot express (ownership, separation of duties, geographic scope).
+ *
+ * <p>Transactions are declared per use case, never on the class: approval needs a write transaction that
+ * can roll back and then recover in a <em>fresh</em> transaction. A class-level read-only default used to
+ * wrap the workflow actions as well, which made proposal-number allocation ({@code nextval}) fail on
+ * PostgreSQL with "cannot execute nextval() in a read-only transaction".</p>
  */
 @Service
-@Transactional(readOnly = true)
 public class ProposalService {
 
     private static final String ENTITY = "Proposal";
@@ -114,6 +119,7 @@ public class ProposalService {
                 audit, clock, acquisitionCaseInitiator, validationService, routing, null);
     }
 
+    @Transactional
     public ProposalValidationService.ValidationResult validate(UUID id, CurrentActor actor) {
         Proposal proposal = loadVisible(id, actor);
         ProposalValidationService.ValidationResult result = validationService.validate(proposal);
@@ -123,6 +129,7 @@ public class ProposalService {
 
     // ------------------------------------------------------------------ queries
 
+    @Transactional(readOnly = true)
     public ProposalResponse get(UUID id, CurrentActor actor) {
         Proposal proposal = loadVisible(id, actor);
         Project project = proposal.getStatus() == ProposalStatus.APPROVED
@@ -134,6 +141,7 @@ public class ProposalService {
         return toResponse(proposal, actor, projectCode, acquisitionCaseNumber);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<ProposalResponse> list(ProposalStatus status, UUID districtId, int page, int size,
                                                CurrentActor actor) {
         Specification<Proposal> spec = access.visibleTo(actor);
@@ -147,17 +155,20 @@ public class ProposalService {
         return PageResponse.from(result, p -> toResponse(p, actor, null, null));
     }
 
+    @Transactional(readOnly = true)
     public List<ProposalHistoryResponse> history(UUID id, CurrentActor actor) {
         loadVisible(id, actor);
         return history.findByProposalIdOrderByOccurredAtAsc(id).stream().map(ProposalHistoryResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<ProposalVersionResponse> versions(UUID id, CurrentActor actor) {
         loadVisible(id, actor);
         return versions.findByProposalIdOrderByVersionNoAsc(id).stream().map(ProposalVersionResponse::from).toList();
     }
 
     /** The routing history of one proposal (who was assigned which stage and when). */
+    @Transactional(readOnly = true)
     public List<AssignmentResponse> assignments(UUID id, CurrentActor actor) {
         loadVisible(id, actor);
         Map<UUID, String> usernames = new java.util.HashMap<>();
@@ -167,6 +178,7 @@ public class ProposalService {
     }
 
     /** Open assignments of the caller: the "my tasks" work queue, newest first. */
+    @Transactional(readOnly = true)
     public PageResponse<MyTaskResponse> myTasks(CurrentActor actor, int page, int size) {
         Page<ProposalAssignment> result = assignmentRepository.findByAssignedUserIdAndStatusIn(
                 actor.userId(),
@@ -214,16 +226,34 @@ public class ProposalService {
 
     // ------------------------------------------------------------------ workflow actions
 
+    /**
+     * Deliberately NOT transactional: approval has to start its own attempt transaction and, after a
+     * PostgreSQL constraint failure, recover in a fresh one. Everything else is routed through a
+     * transactional method on the proxy.
+     */
     public ProposalResponse transition(UUID id, String action, String reason, CurrentActor actor) {
         if (ProposalWorkflow.APPROVE.equals(action)) {
             return approveWithRecovery(id, reason, actor);
         }
-        Proposal proposal = loadVisible(id, actor);
-        return self.applyNonApproveInTransaction(proposal, action, reason, actor);
+        return self.applyNonApproveInTransaction(id, action, reason, actor);
     }
 
     /** One "reject" endpoint: during scrutiny it is a scrutiny rejection, after a recommendation it is the decision. */
     public ProposalResponse reject(UUID id, String reason, CurrentActor actor) {
+        return self.rejectInTransaction(id, reason, actor);
+    }
+
+    @Transactional
+    public ProposalResponse applyNonApproveInTransaction(UUID id, String action, String reason, CurrentActor actor) {
+        if (ProposalWorkflow.APPROVE.equals(action)) {
+            throw new InvalidRequestException("Approval must use the approval flow");
+        }
+        Proposal proposal = loadVisible(id, actor);
+        return applyInCurrentTransaction(proposal, action, reason, actor);
+    }
+
+    @Transactional
+    public ProposalResponse rejectInTransaction(UUID id, String reason, CurrentActor actor) {
         Proposal proposal = loadVisible(id, actor);
         String action = switch (proposal.getStatus()) {
             case UNDER_SCRUTINY -> ProposalWorkflow.REJECT_SCRUTINY;
@@ -231,14 +261,6 @@ public class ProposalService {
             default -> throw new InvalidTransitionException(
                     "A proposal can be rejected only during scrutiny or after a recommendation");
         };
-        return self.applyNonApproveInTransaction(proposal, action, reason, actor);
-    }
-
-    @Transactional
-    public ProposalResponse applyNonApproveInTransaction(Proposal proposal, String action, String reason, CurrentActor actor) {
-        if (ProposalWorkflow.APPROVE.equals(action)) {
-            throw new InvalidRequestException("Approval must use the approval flow");
-        }
         return applyInCurrentTransaction(proposal, action, reason, actor);
     }
 
@@ -261,7 +283,7 @@ public class ProposalService {
         return applyInCurrentTransaction(proposal, ProposalWorkflow.APPROVE, reason, actor);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public ProposalResponse loadApprovedResultInFreshTransaction(UUID id, CurrentActor actor) {
         Proposal proposal = proposals.findCurrentById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Proposal not found: " + id));

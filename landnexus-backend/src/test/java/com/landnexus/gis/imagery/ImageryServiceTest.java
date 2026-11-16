@@ -167,10 +167,15 @@ class ImageryServiceTest {
         ImageryService.TestResult ok = service("QUERY_PARAM", "1.1.1").test();
 
         assertThat(ok.ok()).isTrue();
+        assertThat(ok.connectionState()).isEqualTo("CONNECTED");
         assertThat(ok.bytes()).isEqualTo(PNG.length);
         assertThat(ok.toString()).doesNotContain(SECRET).doesNotContain("127.0.0.1");
         status.set(403);
-        assertThat(service("QUERY_PARAM", "1.1.1").test().ok()).isFalse();
+        ImageryService.TestResult rejected = service("QUERY_PARAM", "1.1.1").test();
+        assertThat(rejected.ok()).isFalse();
+        assertThat(rejected.connectionState()).isEqualTo("AUTHENTICATION_FAILED");
+        assertThat(rejected.httpStatus()).isEqualTo(403);
+        assertThat(rejected.toString()).doesNotContain(SECRET).doesNotContain("127.0.0.1");
     }
 
     @Test

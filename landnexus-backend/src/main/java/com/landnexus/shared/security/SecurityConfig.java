@@ -1,6 +1,7 @@
 package com.landnexus.shared.security;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.List;
@@ -24,6 +25,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -58,12 +63,45 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(JwtProperties properties) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey(properties))
-                .macAlgorithm(MacAlgorithm.HS256)
-                .build();
+    public JwtDecoder jwtDecoder(JwtProperties properties, JdbcTemplate jdbc) {
+        NimbusJwtDecoder decoder = decoder(properties);
+        OAuth2TokenValidator<org.springframework.security.oauth2.jwt.Jwt> authorizationVersion = jwt -> {
+            UUID userId;
+            try {
+                userId = UUID.fromString(jwt.getSubject());
+            } catch (IllegalArgumentException ex) {
+                return OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Invalid user identity", null));
+            }
+            var current = jdbc.query("""
+                    SELECT enabled, authorization_version FROM users WHERE id = ?
+                    """, (rs, row) -> new AuthorizationState(rs.getBoolean("enabled"), rs.getLong("authorization_version")),
+                    userId);
+            Object claim = jwt.getClaims().get("authorization_version");
+            if (current.isEmpty() || !current.get(0).enabled() || !(claim instanceof Number version)
+                    || current.get(0).version() != version.longValue()) {
+                return OAuth2TokenValidatorResult.failure(
+                        new OAuth2Error("invalid_token", "User authorization changed; sign in again", null));
+            }
+            return OAuth2TokenValidatorResult.success();
+        };
+        decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(properties.issuer()), authorizationVersion));
+        return decoder;
+    }
+
+    JwtDecoder jwtDecoder(JwtProperties properties) {
+        NimbusJwtDecoder decoder = decoder(properties);
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
         return decoder;
+    }
+
+    private NimbusJwtDecoder decoder(JwtProperties properties) {
+        return NimbusJwtDecoder.withSecretKey(secretKey(properties))
+                .macAlgorithm(MacAlgorithm.HS256)
+                .build();
+    }
+
+    private record AuthorizationState(boolean enabled, long version) {
     }
 
     /** The token's "authorities" claim (ROLE_x and permission codes) becomes Spring Security authorities as-is. */

@@ -96,7 +96,9 @@ class ProposalApprovalRollbackIntegrationTest extends AbstractIsolatedPgIntegrat
         prefix = "it7-" + suffix.toLowerCase(Locale.ROOT) + "-";
         String stateCode = "ITB" + suffix;
         String stateId = create("/states", "{\"code\":\"" + stateCode + "\",\"name\":\"State " + suffix + "\"}");
-        departmentId = create("/departments", "{\"code\":\"ITBD" + suffix + "\",\"name\":\"Dept " + suffix + "\"}");
+        String ministryId = create("/ministries", "{\"code\":\"ITBM" + suffix + "\",\"name\":\"Ministry " + suffix + "\"}");
+        departmentId = create("/departments", "{\"code\":\"ITBD" + suffix + "\",\"name\":\"Dept " + suffix
+                + "\",\"ministryId\":\"" + ministryId + "\",\"level\":\"STATE\"}");
         district1 = create("/districts", "{\"stateId\":\"" + stateId + "\",\"code\":\"ITBD1" + suffix + "\",\"name\":\"District " + suffix + "\"}");
         taluka1 = create("/talukas", "{\"districtId\":\"" + district1 + "\",\"code\":\"ITBT1" + suffix + "\",\"name\":\"Taluka " + suffix + "\"}");
         village1 = create("/villages", "{\"talukaId\":\"" + taluka1 + "\",\"code\":\"ITBV1" + suffix + "\",\"name\":\"Village " + suffix + "\"}");
@@ -109,7 +111,8 @@ class ProposalApprovalRollbackIntegrationTest extends AbstractIsolatedPgIntegrat
         assignScope(authorityId, district1);
         consultantToken = login("consultant");
         officerToken = login("officer");
-        authorityActor = new CurrentActor(authorityId, prefix + "authority", Set.of("PROPOSAL_DECIDE"));
+        authorityActor = new CurrentActor(authorityId, prefix + "authority",
+                Set.of("COMPETENT_AUTHORITY"), Set.of("PROPOSAL_READ", "PROPOSAL_DECIDE"));
     }
 
     @AfterEach
@@ -130,6 +133,7 @@ class ProposalApprovalRollbackIntegrationTest extends AbstractIsolatedPgIntegrat
             jdbc.execute("ALTER TABLE proposal_status_history ENABLE TRIGGER trg_proposal_status_history_append_only");
             jdbc.execute("ALTER TABLE proposal_versions ENABLE TRIGGER trg_proposal_versions_append_only");
         }
+        jdbc.update("DELETE FROM proposal_assignments WHERE proposal_id IN (SELECT id FROM proposals WHERE owner_user_id IN " + owners + ")", like);
         jdbc.update("DELETE FROM proposals WHERE owner_user_id IN " + owners, like);
         jdbc.update("DELETE FROM user_geographic_scopes WHERE user_id IN " + owners, like);
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id IN " + owners, like);
@@ -141,6 +145,7 @@ class ProposalApprovalRollbackIntegrationTest extends AbstractIsolatedPgIntegrat
         jdbc.update("DELETE FROM districts WHERE state_id IN (SELECT id FROM states WHERE code = ?)", stateCode);
         jdbc.update("DELETE FROM states WHERE code = ?", stateCode);
         jdbc.update("DELETE FROM departments WHERE code = ?", "ITBD" + suffix);
+        jdbc.update("DELETE FROM ministries WHERE code = ?", "ITBM" + suffix);
     }
 
     @Test

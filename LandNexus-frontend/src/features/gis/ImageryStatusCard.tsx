@@ -155,10 +155,24 @@ export function ImageryStatusCard() {
                 aria-live="polite"
               >
                 <p className="flex flex-wrap items-center gap-2 font-semibold text-navy-900">
-                  {result.ok ? (
-                    <Badge variant="success">Provider reachable</Badge>
+                  {result.connectionState === 'CONNECTED' ? (
+                    <Badge variant="success">
+                      {status.provider?.toLocaleUpperCase().includes('BHUVAN')
+                        ? 'BHUVAN CONNECTED'
+                        : 'Provider reachable'}
+                    </Badge>
+                  ) : result.connectionState === 'AUTHENTICATION_FAILED' ? (
+                    <Badge variant="danger">
+                      {status.provider?.toLocaleUpperCase().includes('BHUVAN')
+                        ? 'BHUVAN AUTHENTICATION FAILED'
+                        : 'Provider authentication failed'}
+                    </Badge>
                   ) : (
-                    <Badge variant="danger">Provider not reachable</Badge>
+                    <Badge variant="danger">
+                      {status.provider?.toLocaleUpperCase().includes('BHUVAN')
+                        ? 'BHUVAN UNAVAILABLE'
+                        : 'Provider not reachable'}
+                    </Badge>
                   )}
                   {result.httpStatus !== null ? (
                     <span className="text-xs text-slate-600">

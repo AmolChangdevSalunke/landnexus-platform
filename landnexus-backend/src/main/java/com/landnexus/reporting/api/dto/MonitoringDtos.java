@@ -40,13 +40,27 @@ public final class MonitoringDtos {
 
     /** payments and rrCasesByStatus are null without PAYMENT_READ or RR_READ; paymentMode is always SIMULATED when present. */
     public record FinanceStats(List<StatusAmount> estimates, List<StatusAmount> payments, Map<String, Long> rrCasesByStatus,
-                               String paymentMode) {
+                               List<StatusAmount> pfmsSimulatedPayments, List<StatusAmount> dbtSimulatedPayments,
+                               String paymentMode, Map<String, List<StatusAmount>> paymentsByChannel) {
+        public FinanceStats(List<StatusAmount> estimates, List<StatusAmount> payments, Map<String, Long> rrCasesByStatus,
+                            List<StatusAmount> pfmsSimulatedPayments, List<StatusAmount> dbtSimulatedPayments,
+                            String paymentMode) {
+            this(estimates, payments, rrCasesByStatus, pfmsSimulatedPayments, dbtSimulatedPayments, paymentMode, null);
+        }
+    }
+
+    public record OfficerWorkload(UUID userId, String username, long pending, long inProgress, long overdue) {
+    }
+
+    public record OperationalStats(long gisConflicts, long pendingTasks, Map<String, Long> escalationsByLevel,
+                                   List<OfficerWorkload> officerWorkload) {
     }
 
     /** level: NATIONAL, STATE, DISTRICT, or SCOPED (a user restricted to some districts). finance is null without VALUATION_READ. */
     public record Dashboard(Instant generatedAt, String level, UUID stateId, UUID districtId, ProposalStats proposals,
                             ProjectStats projects, LandStats land, AcquisitionStats acquisition, FinanceStats finance,
-                            List<TrendPoint> trend, List<DistrictRow> districts, List<String> notes) {
+                            OperationalStats operations, List<TrendPoint> trend, List<DistrictRow> districts,
+                            List<String> notes) {
     }
 
     /** type: TEXT, NUMBER, DATE or MONEY (a hint for formatting). */

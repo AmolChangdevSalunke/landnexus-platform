@@ -85,7 +85,9 @@ class ProposalApprovalReliabilityIntegrationTest extends AbstractIsolatedPgInteg
         prefix = "it6-" + suffix.toLowerCase(Locale.ROOT) + "-";
         String stateCode = "ITR" + suffix;
         String stateId = create("/states", "{\"code\":\"" + stateCode + "\",\"name\":\"State " + suffix + "\"}");
-        departmentId = create("/departments", "{\"code\":\"ITRD" + suffix + "\",\"name\":\"Dept " + suffix + "\"}");
+        String ministryId = create("/ministries", "{\"code\":\"ITRM" + suffix + "\",\"name\":\"Ministry " + suffix + "\"}");
+        departmentId = create("/departments", "{\"code\":\"ITRD" + suffix + "\",\"name\":\"Dept " + suffix
+                + "\",\"ministryId\":\"" + ministryId + "\",\"level\":\"STATE\"}");
         district1 = create("/districts", "{\"stateId\":\"" + stateId + "\",\"code\":\"ITRD1" + suffix + "\",\"name\":\"District " + suffix + "\"}");
         taluka1 = create("/talukas", "{\"districtId\":\"" + district1 + "\",\"code\":\"ITRT1" + suffix + "\",\"name\":\"Taluka " + suffix + "\"}");
         village1 = create("/villages", "{\"talukaId\":\"" + taluka1 + "\",\"code\":\"ITRV1" + suffix + "\",\"name\":\"Village " + suffix + "\"}");
@@ -100,7 +102,8 @@ class ProposalApprovalReliabilityIntegrationTest extends AbstractIsolatedPgInteg
         consultantToken = login("consultant");
         officerToken = login("officer");
         authorityToken = login("authority");
-        authorityActor = new CurrentActor(authorityId, prefix + "authority", Set.of("PROPOSAL_DECIDE"));
+        authorityActor = new CurrentActor(authorityId, prefix + "authority",
+                Set.of("COMPETENT_AUTHORITY"), Set.of("PROPOSAL_READ", "PROPOSAL_DECIDE"));
     }
 
     @AfterEach
@@ -112,8 +115,8 @@ class ProposalApprovalReliabilityIntegrationTest extends AbstractIsolatedPgInteg
         String casesByProject = "SELECT id FROM acquisition_cases WHERE project_id IN (" + projectsByOwner + ")";
         jdbc.update("DELETE FROM case_villages WHERE case_id IN (" + casesByProject + ")", like);
         jdbc.update("DELETE FROM field_surveys WHERE case_id IN (" + casesByProject + ")", like);
-        jdbc.update("DELETE FROM parcel_owners WHERE parcel_id IN (SELECT id FROM affected_parcels WHERE case_id IN (" + casesByProject + "))", like);
-        jdbc.update("DELETE FROM affected_parcels WHERE case_id IN (" + casesByProject + ")", like);
+        jdbc.update("DELETE FROM case_parcel_owners WHERE case_parcel_id IN (SELECT id FROM case_parcels WHERE case_id IN (" + casesByProject + "))", like);
+        jdbc.update("DELETE FROM case_parcels WHERE case_id IN (" + casesByProject + ")", like);
         try {
             jdbc.execute("ALTER TABLE acquisition_case_history DISABLE TRIGGER trg_case_history_append_only");
             jdbc.update("DELETE FROM acquisition_case_history WHERE case_id IN (" + casesByProject + ")", like);
@@ -133,6 +136,7 @@ class ProposalApprovalReliabilityIntegrationTest extends AbstractIsolatedPgInteg
             jdbc.execute("ALTER TABLE proposal_status_history ENABLE TRIGGER trg_proposal_status_history_append_only");
             jdbc.execute("ALTER TABLE proposal_versions ENABLE TRIGGER trg_proposal_versions_append_only");
         }
+        jdbc.update("DELETE FROM proposal_assignments WHERE proposal_id IN (SELECT id FROM proposals WHERE owner_user_id IN " + owners + ")", like);
         jdbc.update("DELETE FROM proposals WHERE owner_user_id IN " + owners, like);
         jdbc.update("DELETE FROM user_geographic_scopes WHERE user_id IN " + owners, like);
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id IN " + owners, like);
@@ -145,6 +149,7 @@ class ProposalApprovalReliabilityIntegrationTest extends AbstractIsolatedPgInteg
         jdbc.update("DELETE FROM districts WHERE state_id IN (SELECT id FROM states WHERE code = ?)", stateCode);
         jdbc.update("DELETE FROM states WHERE code = ?", stateCode);
         jdbc.update("DELETE FROM departments WHERE code = ?", "ITRD" + suffix);
+        jdbc.update("DELETE FROM ministries WHERE code = ?", "ITRM" + suffix);
     }
 
     @Test

@@ -44,6 +44,7 @@ import {
 } from './labels'
 import { StatusBadge } from './StatusBadge'
 import { NlamsStageStepper } from './NlamsStageStepper'
+import { ProposalReassignmentPanel } from './ProposalReassignmentPanel'
 import { VersionViewer } from './VersionViewer'
 
 const EDITABLE_STATUSES = new Set(['DRAFT', 'CLARIFICATION_REQUESTED'])
@@ -399,6 +400,13 @@ export function ProposalDetailsPage() {
               <NlamsStageStepper
                 status={proposal.status}
                 assignments={assignmentsQuery.data ?? []}
+              />
+              <ProposalReassignmentPanel
+                proposalId={proposal.id}
+                status={proposal.status}
+                assignments={assignmentsQuery.data ?? []}
+                canManage={can(PERMISSION.PROPOSAL_ASSIGNMENT_MANAGE)}
+                onChanged={reloadAssignments}
               />
               {assignmentsQuery.error ? (
                 <p role="alert" className="mt-3 text-xs font-medium text-danger-700">

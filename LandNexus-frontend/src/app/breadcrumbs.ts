@@ -82,6 +82,7 @@ export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
   const adminLabels: Record<string, string> = {
     '/admin/users': 'Users',
     '/admin/roles': 'Roles and permissions',
+    '/admin/routing-rules': 'Workflow routing rules',
     '/admin/audit': 'Audit trail',
     '/admin/logins': 'Login history',
   }

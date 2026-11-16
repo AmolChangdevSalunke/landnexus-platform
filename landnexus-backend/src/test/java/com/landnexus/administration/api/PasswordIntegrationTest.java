@@ -8,6 +8,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RoleRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
 import java.util.Locale;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -18,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -26,7 +28,8 @@ import org.springframework.web.context.WebApplicationContext;
 
 /** Real database, real filter chains (including the public reset chain), real tokens. */
 @SpringBootTest
-class PasswordIntegrationTest {
+@ActiveProfiles("integration")
+class PasswordIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String NEW = "Another-Passw0rd-456";
@@ -122,7 +125,7 @@ class PasswordIntegrationTest {
         expect(send(token, CHANGE, change(PASSWORD, "short")), 400);
         expect(send(token, CHANGE, change("Wrong-Passw0rd-9", NEW)), 400);
         expect(send(token, CHANGE, change(PASSWORD, PASSWORD)), 400);
-        expect(send(token, CHANGE, change(PASSWORD, prefix + "Aa1")), 400);   // contains the user name
+        expect(send(token, CHANGE, change(PASSWORD, prefix + "target" + "Aa1")), 400);   // contains the user name
         expect(send(null, CHANGE, change(PASSWORD, NEW)), 401);
         expect(send(token, CHANGE, change(PASSWORD, NEW)), 204);
 

@@ -27,13 +27,16 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 /** Real database, real filter chain, real tokens. Counts are asserted on the test's own district only. */
 @SpringBootTest
-class SlaIntegrationTest {
+@ActiveProfiles("integration")
+class SlaIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String ADMIN = "/api/v1/administration";

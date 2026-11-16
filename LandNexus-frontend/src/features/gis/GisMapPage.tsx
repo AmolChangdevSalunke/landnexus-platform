@@ -1,8 +1,17 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RotateCcw } from 'lucide-react'
+import {
+  getImageryStatus,
+  getProjectMap,
+  getVillageParcels,
+  setParcelBoundary,
+  setProjectAlignment,
+} from '../../api/gis'
+import { getTalukas, getVillages } from '../../api/administration'
+import { getParcels } from '../../api/landRecords'
 import { getProjects } from '../../api/projects'
-import type { ProjectResponse } from '../../api/types'
+import type { Geometry, ProjectResponse } from '../../api/types'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
@@ -14,12 +23,13 @@ import { Select } from '../../components/ui/Select'
 import { useApiQuery } from '../../hooks/useApiQuery'
 import { useReferenceNames } from '../../hooks/useReferenceNames'
 import { formatDate, shortId } from '../../utils/format'
-import { PROPOSAL_READ_ANY } from '../../utils/permissions'
+import { PERMISSION, PROPOSAL_READ_ANY } from '../../utils/permissions'
 import { useAuth } from '../auth/useAuth'
 import { normalizeMapName } from '../myWork/mapNames'
 import { useScopeDistricts } from '../myWork/useScopeDistricts'
 import { PROJECT_TYPE_LABELS } from '../proposals/labels'
 import { ProjectStatusBadge } from '../projects/ProjectStatusBadge'
+import { InteractiveGisMap } from './InteractiveGisMap'
 import { ImageryStatusCard } from './ImageryStatusCard'
 
 const ScopeMap = lazy(() =>
@@ -29,12 +39,20 @@ const ScopeMap = lazy(() =>
 const FILTER_ALL = ''
 
 export function GisMapPage() {
-  const { canAny } = useAuth()
+  const { can, canAny } = useAuth()
   const refs = useReferenceNames()
   const scope = useScopeDistricts()
   const canReadProjects = canAny(...PROPOSAL_READ_ANY)
+  const canReadGis = can(PERMISSION.GIS_READ)
+  const canReadMasterData = can(PERMISSION.MASTER_DATA_READ)
+  const canWriteGis = can(PERMISSION.GIS_WRITE)
+  const canReadLandRecords = can(PERMISSION.LAND_RECORD_READ)
 
   const [districtId, setDistrictId] = useState(FILTER_ALL)
+  const [talukaId, setTalukaId] = useState('')
+  const [villageId, setVillageId] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [parcelSearch, setParcelSearch] = useState('')
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(20)
 
@@ -51,6 +69,68 @@ export function GisMapPage() {
 
   const rows = query.data?.content ?? []
   const hasFilters = districtId !== FILTER_ALL
+  const talukasQuery = useApiQuery(
+    () => getTalukas(districtId, 0, 100),
+    [districtId],
+    Boolean(districtId) && canReadMasterData,
+  )
+  const villagesQuery = useApiQuery(
+    () => getVillages(talukaId, 0, 100),
+    [talukaId],
+    Boolean(talukaId) && canReadMasterData,
+  )
+  const parcelDataQuery = useApiQuery(
+    () => getVillageParcels(villageId),
+    [villageId],
+    Boolean(villageId) && canReadGis,
+  )
+  const parcelCandidatesQuery = useApiQuery(
+    () => getParcels({ villageId, number: parcelSearch || undefined, page: 0, size: 100 }),
+    [villageId, parcelSearch],
+    Boolean(villageId) && canReadLandRecords && canWriteGis,
+  )
+  const imageryStatusQuery = useApiQuery(
+    () => getImageryStatus(),
+    [],
+    canReadGis,
+  )
+  const selectedProjectId = rows.some((project) => project.id === projectId)
+    ? projectId
+    : rows[0]?.id ?? ''
+  const projectMapQuery = useApiQuery(
+    () => getProjectMap(selectedProjectId),
+    [selectedProjectId],
+    Boolean(selectedProjectId) && canReadGis,
+  )
+
+  async function persistGeometry(
+    kind: 'PARCEL' | 'ALIGNMENT',
+    geometry: Geometry,
+    parcelId?: string,
+  ) {
+    if (!canWriteGis) {
+      throw new Error('GIS write permission is required to save geometry.')
+    }
+    if (kind === 'PARCEL') {
+      if (!parcelId) {
+        throw new Error('Select a parcel before saving this polygon.')
+      }
+      await setParcelBoundary(parcelId, geometry, 'GeoJSON upload from GIS map')
+      await parcelDataQuery.reload()
+      return
+    }
+    if (!selectedProjectId) {
+      throw new Error('Select a project before saving this alignment.')
+    }
+    await setProjectAlignment(selectedProjectId, geometry, 100, 'GeoJSON upload from GIS map')
+    await projectMapQuery.reload()
+  }
+
+  useEffect(() => {
+    if (selectedProjectId !== projectId) {
+      setProjectId(selectedProjectId)
+    }
+  }, [projectId, selectedProjectId])
 
   const districtOptions = useMemo(() => {
     if (scope.isNationwide) {
@@ -70,6 +150,8 @@ export function GisMapPage() {
 
   function changeDistrict(next: string) {
     setDistrictId(next)
+    setTalukaId('')
+    setVillageId('')
     setPage(0)
   }
 
@@ -183,6 +265,107 @@ export function GisMapPage() {
         {scopeDescription} A missing district is either outside your scope or has no ongoing
         project. The frontend never receives a wider dataset and hides part of it.
       </Alert>
+
+      <Card className="p-4">
+        <CardHeader
+          title="Interactive land acquisition map"
+          description="OpenStreetMap is the always-available base layer; stored PostGIS features and authorized imagery are optional overlays."
+        />
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Select
+            label="Land district (parcel lookup)"
+            value={districtId}
+            onChange={(event) => changeDistrict(event.target.value)}
+            disabled={districtFilterDisabled}
+          >
+            <option value="">Select a district</option>
+            {districtOptions
+              .filter((district) => district.status === 'ACTIVE' || district.id === districtId)
+              .map((district) => (
+                <option key={district.id} value={district.id}>{district.name}</option>
+              ))}
+          </Select>
+          <Select
+            label="Taluka"
+            value={talukaId}
+            onChange={(event) => {
+              setTalukaId(event.target.value)
+              setVillageId('')
+            }}
+            disabled={!districtId || talukasQuery.isLoading || Boolean(talukasQuery.error)}
+          >
+            <option value="">Select a taluka</option>
+            {(talukasQuery.data?.content ?? []).map((taluka) => (
+              <option key={taluka.id} value={taluka.id}>{taluka.name}</option>
+            ))}
+          </Select>
+          <Select
+            label="Village / parcel layer"
+            value={villageId}
+            onChange={(event) => setVillageId(event.target.value)}
+            disabled={!talukaId || villagesQuery.isLoading || Boolean(villagesQuery.error)}
+          >
+            <option value="">Select a village</option>
+            {(villagesQuery.data?.content ?? []).map((village) => (
+              <option key={village.id} value={village.id}>{village.name}</option>
+            ))}
+          </Select>
+          <Select
+            label="Project alignment / conflict layer"
+            value={selectedProjectId}
+            onChange={(event) => setProjectId(event.target.value)}
+            disabled={rows.length === 0 || !canReadGis}
+          >
+            <option value="">No project selected</option>
+            {rows.map((project) => (
+              <option key={project.id} value={project.id}>{project.code} · {project.title}</option>
+            ))}
+          </Select>
+          <label className="text-sm font-medium text-slate-700 md:col-span-2 xl:col-span-4">
+            Search survey or Gat number
+            <input
+              value={parcelSearch}
+              onChange={(event) => setParcelSearch(event.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+              placeholder="Search within the selected village's mapped parcels"
+            />
+          </label>
+        </div>
+        {talukasQuery.error ? (
+          <Alert variant="error" title="Taluka list could not be loaded" className="mt-3">
+            {talukasQuery.error.message}
+          </Alert>
+        ) : null}
+        {villagesQuery.error ? (
+          <Alert variant="error" title="Village list could not be loaded" className="mt-3">
+            {villagesQuery.error.message}
+          </Alert>
+        ) : null}
+        {projectMapQuery.error && projectMapQuery.error.status !== 404 ? (
+          <Alert variant="error" title="Project GIS data could not be loaded" className="mt-3">
+            {projectMapQuery.error.message}
+          </Alert>
+        ) : null}
+        {parcelDataQuery.error && parcelDataQuery.error.status !== 404 ? (
+          <Alert variant="error" title="Village parcel GIS data could not be loaded" className="mt-3">
+            {parcelDataQuery.error.message}
+          </Alert>
+        ) : null}
+        <div className="mt-4">
+          <InteractiveGisMap
+            projectData={projectMapQuery.data ?? null}
+            parcelData={parcelDataQuery.data ?? null}
+            projectName={rows.find((project) => project.id === selectedProjectId)?.title ?? null}
+            villageName={villagesQuery.data?.content.find((village) => village.id === villageId)?.name ?? null}
+            parcelSearch={parcelSearch}
+            imageryEnabled={imageryStatusQuery.data?.enabled ?? false}
+            imageryProvider={imageryStatusQuery.data?.provider ?? null}
+            parcelCandidates={parcelCandidatesQuery.data?.content ?? []}
+            canPersistGeometry={canWriteGis}
+            onPersistGeometry={persistGeometry}
+          />
+        </div>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <Card className="p-4">

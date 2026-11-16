@@ -23,6 +23,8 @@ public class CompensationPayment {
     @Column(name = "share_percent", nullable = false, updatable = false, precision = 5, scale = 2) private BigDecimal sharePercent;
     @Column(name = "amount", nullable = false, updatable = false, precision = 15, scale = 2) private BigDecimal amount;
     @Enumerated(EnumType.STRING) @Column(name = "status", nullable = false, length = 20) private PaymentStatus status = PaymentStatus.INSTRUCTED;
+    @Enumerated(EnumType.STRING) @Column(name = "payment_channel", nullable = false, length = 24)
+    private PaymentChannel paymentChannel = PaymentChannel.UNCLASSIFIED;
     @Column(name = "mode", nullable = false, length = 20) private String mode = "SIMULATED";
     @Column(name = "reference", length = 60) private String reference;
     @Column(name = "failure_reason", length = 500) private String failureReason;
@@ -37,13 +39,14 @@ public class CompensationPayment {
     protected CompensationPayment() { }
 
     public CompensationPayment(UUID valuationId, UUID caseId, UUID caseParcelId, UUID landownerId,
-                               BigDecimal sharePercent, BigDecimal amount) {
+                               BigDecimal sharePercent, BigDecimal amount, PaymentChannel paymentChannel) {
         this.valuationId = valuationId;
         this.caseId = caseId;
         this.caseParcelId = caseParcelId;
         this.landownerId = landownerId;
         this.sharePercent = sharePercent;
         this.amount = amount;
+        this.paymentChannel = paymentChannel;
     }
 
     @PrePersist
@@ -77,6 +80,7 @@ public class CompensationPayment {
     public BigDecimal getSharePercent() { return sharePercent; }
     public BigDecimal getAmount() { return amount; }
     public PaymentStatus getStatus() { return status; }
+    public PaymentChannel getPaymentChannel() { return paymentChannel; }
     public String getMode() { return mode; }
     public String getReference() { return reference; }
     public String getFailureReason() { return failureReason; }

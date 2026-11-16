@@ -103,8 +103,12 @@ class DocumentServiceTest {
     }
 
     private void stubCurrentVersion(int version) {
+        stubCurrentVersion(version, "map.pdf", "application/pdf");
+    }
+
+    private void stubCurrentVersion(int version, String filename, String contentType) {
         when(versions.findByDocumentIdAndVersionNo(docId, version)).thenReturn(Optional.of(
-                new LandDocumentVersion(docId, version, "map.pdf", "2026/11/k.bin", "application/pdf", 13,
+                new LandDocumentVersion(docId, version, filename, "2026/11/k.bin", contentType, 13,
                         "a".repeat(64), uploaderId, "field", NOW)));
     }
 
@@ -224,6 +228,41 @@ class DocumentServiceTest {
         assertThat(file.filename()).isEqualTo("map.pdf");
         assertThat(file.contentType()).isEqualTo("application/pdf");
         verify(audit).record(eq("DOWNLOAD"), eq("LandDocument"), any(), anyString());
+    }
+
+    @Test
+    void preview_isAuditedSeparately_andReturnsTheStoredFile() {
+        document(VerificationStatus.PENDING, 1);
+        stubCurrentVersion(1);
+        when(storage.load("2026/11/k.bin")).thenReturn(new ByteArrayResource(new byte[13]));
+
+        UploadedFile.Download file = service.preview(docId, 1, verifier);
+
+        assertThat(file.filename()).isEqualTo("map.pdf");
+        assertThat(file.contentType()).isEqualTo("application/pdf");
+        verify(audit).record(eq("PREVIEW"), eq("LandDocument"), any(), anyString());
+        verify(audit, never()).record(eq("DOWNLOAD"), any(), any(), anyString());
+    }
+
+    @Test
+    void preview_ofANonPreviewableType_isRefused_andNotAudited() {
+        document(VerificationStatus.PENDING, 1);
+        stubCurrentVersion(1, "notes.txt", "text/plain");
+
+        assertThatThrownBy(() -> service.preview(docId, 1, verifier))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("cannot be previewed");
+        verify(storage, never()).load(anyString());
+        verify(audit, never()).record(any(), any(), any(), any());
+    }
+
+    @Test
+    void preview_unknownVersion_isNotFound() {
+        document(VerificationStatus.PENDING, 1);
+        when(versions.findByDocumentIdAndVersionNo(docId, 9)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.preview(docId, 9, verifier)).isInstanceOf(ResourceNotFoundException.class);
+        verify(audit, never()).record(any(), any(), any(), any());
     }
 
     @Test

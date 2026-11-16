@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -30,6 +30,10 @@ describe('DocumentDetailsPage', () => {
     resetReferenceCacheForTests()
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('shows document metadata and version history', async () => {
     server.use(
       http.get(`${API_BASE_URL}/land-records/documents/:id`, () =>
@@ -47,6 +51,52 @@ describe('DocumentDetailsPage', () => {
     expect(screen.getByText('Version history (1)')).toBeInTheDocument()
     expect(screen.getAllByText('extract.pdf').length).toBeGreaterThan(0)
     expect(screen.getAllByTitle(DOCUMENT.versions[0].sha256).length).toBeGreaterThan(0)
+  })
+
+  it('previews the current version inline and revokes the object URL on close', async () => {
+    const user = userEvent.setup()
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:preview-test')
+    const revokeObjectURL = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+
+    server.use(
+      http.get(`${API_BASE_URL}/land-records/documents/:id`, () =>
+        HttpResponse.json(DOCUMENT),
+      ),
+      http.get(`${API_BASE_URL}/land-records/parcels/:id`, () =>
+        HttpResponse.json(PARCEL),
+      ),
+      http.get(
+        `${API_BASE_URL}/land-records/documents/:id/versions/:versionNo/preview`,
+        () =>
+          new HttpResponse('%PDF-1.4 payload', {
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': 'inline; filename="extract.pdf"',
+            },
+          }),
+      ),
+    )
+
+    renderDetails()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Preview current version' }),
+    )
+
+    expect(
+      await screen.findByTitle('Preview of extract.pdf'),
+    ).toBeInTheDocument()
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => {
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview-test')
+    })
   })
 
   it('verifies a pending document with remarks', async () => {

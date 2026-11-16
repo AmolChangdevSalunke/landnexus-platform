@@ -20,6 +20,16 @@ export interface ScopeFilter {
   districtId?: string
 }
 
+export interface AnalyticsFilters extends ScopeFilter {
+  talukaId?: string
+  projectId?: string
+  fromDate?: string
+  toDate?: string
+  proposalStatus?: string
+  projectStatus?: string
+  acquisitionStatus?: string
+}
+
 /* ------------------------------------------------------------------ */
 /* Dashboards                                                          */
 /* ------------------------------------------------------------------ */
@@ -27,11 +37,25 @@ export interface ScopeFilter {
 export async function getDashboard({
   stateId,
   districtId,
-}: ScopeFilter = {}): Promise<Dashboard> {
+  projectId,
+  talukaId,
+  fromDate,
+  toDate,
+  proposalStatus,
+  projectStatus,
+  acquisitionStatus,
+}: AnalyticsFilters = {}): Promise<Dashboard> {
   const { data } = await apiClient.get<Dashboard>('/monitoring/dashboard', {
     params: {
       stateId: stateId || undefined,
       districtId: districtId || undefined,
+      projectId: projectId || undefined,
+      talukaId: talukaId || undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      proposalStatus: proposalStatus || undefined,
+      projectStatus: projectStatus || undefined,
+      acquisitionStatus: acquisitionStatus || undefined,
     },
   })
   return data
@@ -60,7 +84,7 @@ export async function getReportCatalogue(): Promise<ReportInfo[]> {
   return data
 }
 
-export interface ReportRunParams extends ScopeFilter {
+export interface ReportRunParams extends AnalyticsFilters {
   status?: string
   page?: number
   size?: number
@@ -68,13 +92,17 @@ export interface ReportRunParams extends ScopeFilter {
 
 export async function runReport(
   code: string,
-  { status, stateId, districtId, page = 0, size = 50 }: ReportRunParams = {},
+  { status, stateId, districtId, talukaId, projectId, fromDate, toDate, page = 0, size = 50 }: ReportRunParams = {},
 ): Promise<ReportResult> {
   const { data } = await apiClient.get<ReportResult>(`/monitoring/reports/${code}`, {
     params: {
       status: status || undefined,
       stateId: stateId || undefined,
       districtId: districtId || undefined,
+      talukaId: talukaId || undefined,
+      projectId: projectId || undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
       page,
       size,
     },
@@ -88,7 +116,7 @@ export async function runReport(
  */
 export async function exportReportCsv(
   code: string,
-  { status, stateId, districtId }: ReportRunParams = {},
+  { status, stateId, districtId, talukaId, projectId, fromDate, toDate }: ReportRunParams = {},
 ): Promise<{ blob: Blob; filename: string }> {
   const response = await apiClient.get<Blob>(
     `/monitoring/reports/${code}/export.csv`,
@@ -97,6 +125,10 @@ export async function exportReportCsv(
         status: status || undefined,
         stateId: stateId || undefined,
         districtId: districtId || undefined,
+        talukaId: talukaId || undefined,
+        projectId: projectId || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
       },
       responseType: 'blob',
     },

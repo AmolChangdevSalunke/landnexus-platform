@@ -4,12 +4,23 @@ import {
   AlarmClock,
   BellRing,
   Clock,
+  Pencil,
   RefreshCw,
   ShieldAlert,
   TrendingUp,
 } from 'lucide-react'
-import type { ForecastItem, SlaItem } from '../../api/types'
-import { getEscalations, getForecast, getSlaOverview } from '../../api/monitoring'
+import type { ForecastItem, SlaItem, SlaRule, SlaRuleRequest, SlaItemType } from '../../api/types'
+import {
+  getEscalations,
+  getForecast,
+  getSlaOverview,
+  getSlaRules,
+  scanSla,
+  updateSlaRule,
+} from '../../api/monitoring'
+import { toApiErrorInfo } from '../../api/errors'
+import { useAppDispatch } from '../../app/hooks'
+import { addToast } from '../../app/toastsSlice'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
 import { Badge, type BadgeVariant } from '../../components/ui/Badge'
@@ -17,6 +28,8 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
 import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { ErrorState } from '../../components/ui/ErrorState'
+import { Input } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useApiQuery } from '../../hooks/useApiQuery'
@@ -46,11 +59,25 @@ const RISK_VARIANTS: Record<string, BadgeVariant> = {
   INSUFFICIENT_DATA: 'neutral',
 }
 
+const SLA_ROLES = [
+  'SCRUTINY_OFFICER',
+  'FIELD_OFFICER',
+  'COMPETENT_AUTHORITY',
+  'FINANCE_OFFICER',
+  'DISTRICT_ADMIN',
+  'DIVISION_ADMIN',
+  'STATE_ADMIN',
+]
+
 export function SlaMonitoringPage() {
+  const dispatch = useAppDispatch()
   const { can } = useAuth()
   const canRead = can(PERMISSION.SLA_READ)
+  const canManage = can(PERMISSION.SETTINGS_MANAGE)
   const scope = useMonitoringScope()
   const [levelFilter, setLevelFilter] = useState<'ALL' | 'WARNING' | 'BREACH'>('ALL')
+  const [editingRule, setEditingRule] = useState<SlaRule | null>(null)
+  const [scanLoading, setScanLoading] = useState(false)
   const escalationPager = usePagination(20)
 
   const sla = useApiQuery(
@@ -77,10 +104,33 @@ export function SlaMonitoringPage() {
     canRead,
   )
 
+  const rules = useApiQuery(() => getSlaRules(), [], canRead)
+
   function refreshAll() {
     sla.reload()
     forecast.reload()
     escalations.reload()
+    rules.reload()
+  }
+
+  async function runScan() {
+    setScanLoading(true)
+    try {
+      const result = await scanSla(scope.districtId || undefined)
+      dispatch(addToast({
+        variant: 'success',
+        message: `SLA scan recorded ${result.warningsRaised} warnings and ${result.breachesRaised} breaches; ${result.notificationsSent} notifications sent.`,
+      }))
+      refreshAll()
+    } catch (caught: unknown) {
+      dispatch(addToast({
+        variant: 'error',
+        title: 'SLA scan failed',
+        message: toApiErrorInfo(caught).message,
+      }))
+    } finally {
+      setScanLoading(false)
+    }
   }
 
   const visibleItems = (sla.data?.items ?? []).filter((item) =>
@@ -98,14 +148,21 @@ export function SlaMonitoringPage() {
         title="SLA and alerts"
         description="Open items against their SLA limits, the escalation log, and a statistical forecast of breach risk."
         actions={
-          <Button
-            variant="outline"
-            onClick={refreshAll}
-            isLoading={sla.isLoading || forecast.isLoading}
-            leftIcon={<RefreshCw aria-hidden="true" className="h-4 w-4" />}
-          >
-            Refresh
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {canManage ? (
+              <Button variant="secondary" onClick={() => void runScan()} isLoading={scanLoading}>
+                Run SLA scan
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={refreshAll}
+              isLoading={sla.isLoading || forecast.isLoading}
+              leftIcon={<RefreshCw aria-hidden="true" className="h-4 w-4" />}
+            >
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -220,6 +277,7 @@ export function SlaMonitoringPage() {
                     >
                       Responsible role
                     </th>
+                    {canManage ? <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -244,6 +302,22 @@ export function SlaMonitoringPage() {
                         {formatDaysHours(row.breachAfterHours)}
                       </td>
                       <td className="px-3 py-2 text-slate-600">{row.responsibleRole}</td>
+                      {canManage ? (
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const rule = rules.data?.find((item) => item.itemType === row.itemType)
+                              if (rule) setEditingRule(rule)
+                            }}
+                            disabled={rules.isLoading || !rules.data?.some((item) => item.itemType === row.itemType)}
+                            leftIcon={<Pencil aria-hidden="true" className="h-3.5 w-3.5" />}
+                          >
+                            Configure
+                          </Button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -462,7 +536,96 @@ export function SlaMonitoringPage() {
           </div>
         </>
       ) : null}
+      {editingRule ? (
+        <SlaRuleDialog
+          rule={editingRule}
+          onClose={() => setEditingRule(null)}
+          onSaved={() => {
+            setEditingRule(null)
+            refreshAll()
+          }}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function SlaRuleDialog({
+  rule,
+  onClose,
+  onSaved,
+}: {
+  rule: SlaRule
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [warnAfterHours, setWarnAfterHours] = useState(String(rule.warnAfterHours))
+  const [breachAfterHours, setBreachAfterHours] = useState(String(rule.breachAfterHours))
+  const [responsibleRole, setResponsibleRole] = useState(rule.responsibleRole)
+  const [escalateRole, setEscalateRole] = useState(rule.escalateRole ?? '')
+  const [active, setActive] = useState(rule.active)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    const warn = Number(warnAfterHours)
+    const breach = Number(breachAfterHours)
+    if (!Number.isInteger(warn) || !Number.isInteger(breach) || warn < 0 || breach <= warn || breach > 8760) {
+      setError('Use whole-hour values from 0 to 8760; the breach threshold must exceed the warning threshold.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    const request: SlaRuleRequest = {
+      warnAfterHours: warn,
+      breachAfterHours: breach,
+      responsibleRole,
+      escalateRole: escalateRole || null,
+      active,
+      rowVersion: rule.rowVersion,
+    }
+    try {
+      await updateSlaRule(rule.itemType as SlaItemType, request)
+      onSaved()
+    } catch (caught: unknown) {
+      const info = toApiErrorInfo(caught)
+      setError(info.status === 409 ? 'This SLA rule changed elsewhere. Close and reload before editing again.' : info.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      title={`Configure ${rule.title}`}
+      description="Changes are persisted by the backend and take effect on subsequent SLA scans."
+      onClose={() => { if (!saving) onClose() }}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={() => void save()} isLoading={saving}>Save SLA rule</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error ? <Alert variant="error" title="SLA rule not saved">{error}</Alert> : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input label="Warn after (hours)" type="number" min={0} max={8760} step={1} value={warnAfterHours} onChange={(event) => setWarnAfterHours(event.target.value)} />
+          <Input label="Breach after (hours)" type="number" min={1} max={8760} step={1} value={breachAfterHours} onChange={(event) => setBreachAfterHours(event.target.value)} />
+          <Select label="Responsible role" value={responsibleRole} onChange={(event) => setResponsibleRole(event.target.value)}>
+            {SLA_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+          </Select>
+          <Select label="Escalation role at breach" value={escalateRole} onChange={(event) => setEscalateRole(event.target.value)}>
+            <option value="">No additional escalation role</option>
+            {SLA_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+          </Select>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
+          SLA rule active
+        </label>
+      </div>
+    </Modal>
   )
 }
 

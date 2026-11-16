@@ -17,6 +17,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,8 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -34,7 +38,8 @@ import org.springframework.web.context.WebApplicationContext;
 
 /** Real database, real filter chain, real tokens. Exact counts are asserted by filtering on the test's own district. */
 @SpringBootTest
-class MonitoringIntegrationTest {
+@ActiveProfiles("integration")
+class MonitoringIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String ADMIN = "/api/v1/administration";
@@ -262,11 +267,63 @@ class MonitoringIntegrationTest {
         expect(getRequest(field2, MON + "/dashboard?stateId=" + state), 200);   // the state exists for them through district two
         expect(getRequest(national, MON + "/dashboard?stateId=" + UUID.randomUUID()), 404);
 
+        String today = LocalDate.now(ZoneId.of("Asia/Kolkata")).toString();
+        MvcResult filtered = getRequest(finance, MON + "/dashboard?districtId=" + district1 + "&projectId=" + projectId
+                + "&talukaId=" + talukaIdForProject() + "&fromDate=" + today + "&toDate=" + today);
+        expect(filtered, 200);
+        assertThat(num(body(filtered), "$.proposals.total")).isEqualTo(1);
+        assertThat(num(body(filtered), "$.projects.total")).isEqualTo(1);
+        assertThat(num(body(filtered), "$.acquisition.totalCases")).isEqualTo(1);
+        Long directProposalCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM proposals p
+                JOIN projects pr ON pr.proposal_id = p.id
+                JOIN project_villages pv ON pv.project_id = pr.id
+                JOIN villages v ON v.id = pv.village_id
+                WHERE p.district_id = ? AND pr.id = ? AND v.taluka_id = ?
+                  AND DATE(p.created_at AT TIME ZONE 'Asia/Kolkata') = ?
+                """, Long.class, UUID.fromString(district1), projectId, talukaIdForProject(), LocalDate.parse(today));
+        assertThat(num(body(filtered), "$.proposals.total")).isEqualTo(directProposalCount);
+        Long directProjectCount = jdbc.queryForObject("SELECT COUNT(*) FROM projects p WHERE p.id = ? AND p.district_id = ? "
+                + "AND DATE(p.created_at AT TIME ZONE 'Asia/Kolkata') = ?", Long.class, projectId,
+                UUID.fromString(district1), LocalDate.parse(today));
+        Long directCaseCount = jdbc.queryForObject("SELECT COUNT(*) FROM acquisition_cases c WHERE c.project_id = ? "
+                + "AND c.district_id = ? AND DATE(c.created_at AT TIME ZONE 'Asia/Kolkata') = ?", Long.class, projectId,
+                UUID.fromString(district1), LocalDate.parse(today));
+        Long directPendingCount = jdbc.queryForObject("SELECT COUNT(*) FROM proposal_assignments a JOIN proposals p ON p.id = a.proposal_id "
+                + "WHERE a.status IN ('PENDING','IN_PROGRESS') AND p.district_id = ? AND a.assigned_at::date = ? "
+                + "AND EXISTS (SELECT 1 FROM projects pr WHERE pr.id = ? AND pr.proposal_id = p.id)",
+                Long.class, UUID.fromString(district1), LocalDate.parse(today), projectId);
+        assertThat(num(body(filtered), "$.projects.total")).isEqualTo(directProjectCount);
+        assertThat(num(body(filtered), "$.acquisition.totalCases")).isEqualTo(directCaseCount);
+        assertThat(num(body(filtered), "$.operations.pendingTasks")).isEqualTo(directPendingCount);
+        assertThat(num(body(filtered), "$.trend[5].proposalsSubmitted")).isEqualTo(directProposalCount);
+        assertThat(num(body(filtered), "$.trend[5].casesOpened")).isEqualTo(directCaseCount);
+        assertThat(num(body(filtered), "$.districts[0].projects")).isEqualTo(directProjectCount);
+        assertThat(num(body(filtered), "$.districts[0].openCases")).isEqualTo(directCaseCount);
+        assertThat(body(filtered)).contains("\"officerWorkload\":null");
+
+        MvcResult statusFiltered = getRequest(finance, MON + "/dashboard?districtId=" + district1
+                + "&projectId=" + projectId + "&talukaId=" + talukaIdForProject()
+                + "&fromDate=" + today + "&toDate=" + today + "&proposalStatus=APPROVED"
+                + "&projectStatus=ACTIVE&acquisitionStatus=INITIATED");
+        expect(statusFiltered, 200);
+        assertThat(num(body(statusFiltered), "$.proposals.total")).isEqualTo(1);
+        assertThat(num(body(statusFiltered), "$.projects.total")).isEqualTo(1);
+        assertThat(num(body(statusFiltered), "$.acquisition.totalCases")).isEqualTo(1);
+        assertThat(num(body(statusFiltered), "$.districts[0].projects")).isEqualTo(1);
+        expect(getRequest(finance, MON + "/dashboard?proposalStatus=NOT_A_STATUS"), 400);
+        expect(getRequest(field2, MON + "/dashboard?projectId=" + projectId), 404);
+
         // national and permissions
         MvcResult nat = getRequest(national, MON + "/dashboard");
         expect(nat, 200);
         assertThat(JsonPath.<String>read(body(nat), "$.level")).isEqualTo("NATIONAL");
         expect(getRequest(consultant, MON + "/dashboard"), 403);
+    }
+
+    private UUID talukaIdForProject() {
+        return jdbc.queryForObject("SELECT t.id FROM talukas t JOIN districts d ON d.id = t.district_id "
+                + "WHERE d.id = ? AND t.code = 'T1'", UUID.class, UUID.fromString(district1));
     }
 
     @Test

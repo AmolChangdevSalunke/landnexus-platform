@@ -8,12 +8,15 @@ import {
   runReport,
 } from '../../api/monitoring'
 import { toApiErrorInfo } from '../../api/errors'
+import { getTalukas } from '../../api/administration'
+import { getProjects } from '../../api/projects'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { DataTable, type TableColumn } from '../../components/ui/DataTable'
 import { ErrorState } from '../../components/ui/ErrorState'
+import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { useApiQuery } from '../../hooks/useApiQuery'
 import { PERMISSION } from '../../utils/permissions'
@@ -37,16 +40,36 @@ export function MisReportsPage() {
   const { can } = useAuth()
   const canRead = can(PERMISSION.REPORT_READ)
   const canExport = can(PERMISSION.REPORT_EXPORT)
+  const canReadMaster = can(PERMISSION.MASTER_DATA_READ)
+  const canReadProjects =
+    can(PERMISSION.PROPOSAL_READ) || can(PERMISSION.PROPOSAL_READ_OWN)
   const scope = useMonitoringScope()
   const [params, setParams] = useSearchParams()
   const requestedCode = params.get('report') ?? ''
   const status = params.get('status') ?? ''
+  const talukaId = params.get('talukaId') ?? ''
+  const projectId = params.get('projectId') ?? ''
+  const fromDate = params.get('fromDate') ?? ''
+  const toDate = params.get('toDate') ?? ''
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(50)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   const catalogue = useApiQuery(() => getReportCatalogue(), [], canRead)
+  const projectsQuery = useApiQuery(
+    () => getProjects({ districtId: scope.districtId || undefined, page: 0, size: 100 }),
+    [scope.districtId],
+    canReadProjects,
+  )
+  const talukasQuery = useApiQuery(
+    () =>
+      scope.districtId
+        ? getTalukas(scope.districtId, 0, 100).then((response) => response.content)
+        : Promise.resolve([]),
+    [scope.districtId],
+    canReadMaster && Boolean(scope.districtId),
+  )
   const catalogueCodes = (catalogue.data ?? []).map((info) => info.code)
   const activeCode: ReportCode | '' =
     requestedCode && catalogueCodes.includes(requestedCode as ReportCode)
@@ -61,18 +84,29 @@ export function MisReportsPage() {
         status: status || undefined,
         stateId: scope.stateId || undefined,
         districtId: scope.districtId || undefined,
+        talukaId: talukaId || undefined,
+        projectId: projectId || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
         page,
         size,
       }),
-    [activeCode, status, scope.stateId, scope.districtId, page, size],
+    [activeCode, status, scope.stateId, scope.districtId, talukaId, projectId, fromDate, toDate, page, size],
     canRead && Boolean(activeCode),
   )
 
   useEffect(() => {
     setPage(0)
-  }, [activeCode, status, scope.stateId, scope.districtId])
+  }, [activeCode, status, scope.stateId, scope.districtId, talukaId, projectId, fromDate, toDate])
 
-  function updateParams(next: { report?: string; status?: string }) {
+  function updateParams(next: {
+    report?: string
+    status?: string
+    talukaId?: string
+    projectId?: string
+    fromDate?: string
+    toDate?: string
+  }) {
     setParams(
       (current) => {
         const merged = new URLSearchParams(current)
@@ -83,11 +117,13 @@ export function MisReportsPage() {
             merged.delete('report')
           }
         }
-        if (next.status !== undefined) {
-          if (next.status) {
-            merged.set('status', next.status)
-          } else {
-            merged.delete('status')
+        for (const key of ['status', 'talukaId', 'projectId', 'fromDate', 'toDate'] as const) {
+          if (next[key] !== undefined) {
+            if (next[key]) {
+              merged.set(key, next[key]!)
+            } else {
+              merged.delete(key)
+            }
           }
         }
         return merged
@@ -107,6 +143,10 @@ export function MisReportsPage() {
         status: status || undefined,
         stateId: scope.stateId || undefined,
         districtId: scope.districtId || undefined,
+        talukaId: talukaId || undefined,
+        projectId: projectId || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
       })
       saveBlob(blob, filename)
     } catch (caught) {
@@ -178,6 +218,60 @@ export function MisReportsPage() {
               {info.title}
             </option>
           ))}
+        </Select>
+
+        <Input
+          label="From date"
+          type="date"
+          value={fromDate}
+          max={toDate || undefined}
+          onChange={(event) => updateParams({ fromDate: event.target.value })}
+        />
+        <Input
+          label="To date"
+          type="date"
+          value={toDate}
+          min={fromDate || undefined}
+          onChange={(event) => updateParams({ toDate: event.target.value })}
+        />
+        <Select
+          label="Taluka"
+          value={talukaId}
+          disabled={!canReadMaster || !scope.districtId || talukasQuery.isLoading}
+          hint={
+            !canReadMaster
+              ? 'Taluka choices require master-data read access.'
+              : !scope.districtId
+                ? 'Select a district to load its talukas.'
+                : talukasQuery.error?.message
+          }
+          onChange={(event) => updateParams({ talukaId: event.target.value })}
+        >
+          <option value="">{scope.districtId ? 'All talukas' : 'Select a district first'}</option>
+          {(talukasQuery.data ?? []).map((taluka) => (
+            <option key={taluka.id} value={taluka.id}>{taluka.name}</option>
+          ))}
+        </Select>
+        <Select
+          label="Project"
+          value={projectId}
+          disabled={!canReadProjects || projectsQuery.isLoading}
+          hint={
+            !canReadProjects
+              ? 'Project choices require proposal read access.'
+              : projectsQuery.error?.message
+          }
+          onChange={(event) => updateParams({ projectId: event.target.value })}
+        >
+          <option value="">All projects in scope</option>
+          {(projectsQuery.data?.content ?? [])
+            .filter((project) => {
+              if (scope.districtId && project.districtId !== scope.districtId) return false
+              return !scope.stateId || project.stateId === scope.stateId
+            })
+            .map((project) => (
+              <option key={project.id} value={project.id}>{project.code} · {project.title}</option>
+            ))}
         </Select>
 
         <Select

@@ -89,6 +89,12 @@ export const IMPLEMENTED_MODULES: ImplementedModule[] = [
     to: '/notifications',
     icon: Bell,
   },
+  {
+    title: 'Routing administration',
+    summary: 'Configure proposal-routing conditions and activate audited routing rules.',
+    to: '/admin/routing-rules',
+    icon: Route,
+  },
 ]
 
 /**
@@ -97,17 +103,6 @@ export const IMPLEMENTED_MODULES: ImplementedModule[] = [
  * which is already live.
  */
 export const ROADMAP_MODULES: Record<string, RoadmapModule> = {
-  'routing-rules': {
-    title: 'Routing-rule administration',
-    summary: 'Configure the automatic scrutiny and decision routing rules from the UI.',
-    icon: Route,
-    contents: [
-      'Create and edit routing rules',
-      'Threshold and project-type conditions',
-      'Named approver and escalation targets',
-      'Audited activation and retirement of rules',
-    ],
-  },
   'notification-settings': {
     title: 'Notification preferences and delivery console',
     summary: 'Let users manage external delivery and give administrators a delivery console.',
@@ -177,4 +172,4 @@ export const ROADMAP_MODULES: Record<string, RoadmapModule> = {
 }
 
 export const ROADMAP_MODULE_KEYS = Object.keys(ROADMAP_MODULES)
-export const DEFAULT_ROADMAP_KEY = ROADMAP_MODULE_KEYS[0]
+export const DEFAULT_ROADMAP_KEY = 'notification-settings'

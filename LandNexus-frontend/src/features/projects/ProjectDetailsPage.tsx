@@ -1,19 +1,24 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
-import { ArrowLeft, AlertTriangle, FileText } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, FileText, Lock, Pencil, RotateCcw } from 'lucide-react'
+import { useAppDispatch } from '../../app/hooks'
+import { addToast } from '../../app/toastsSlice'
 import { toApiErrorInfo } from '../../api/errors'
-import { getProject } from '../../api/projects'
+import { closeProject, getProject, reopenProject } from '../../api/projects'
 import type { ProjectResponse } from '../../api/types'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { CopyButton } from '../../components/ui/CopyButton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { ErrorState } from '../../components/ui/ErrorState'
 import { LinkButton } from '../../components/ui/LinkButton'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Tabs } from '../../components/ui/Tabs'
+import { useApiMutation } from '../../hooks/useApiMutation'
 import { useApiQuery } from '../../hooks/useApiQuery'
 import { useReferenceNames } from '../../hooks/useReferenceNames'
 import {
@@ -46,10 +51,14 @@ function ProjectDetailsSkeleton() {
 
 export function ProjectDetailsPage() {
   const { id } = useParams<{ id: string }>()
+  const dispatch = useAppDispatch()
   const { can } = useAuth()
   const refs = useReferenceNames()
   const { ensureDistrictVillages } = refs
   const [activeTab, setActiveTab] = useState('overview')
+  const [statusAction, setStatusAction] = useState<'close' | 'reopen' | null>(null)
+  const mutation = useApiMutation<ProjectResponse>()
+  const canManage = can(PERMISSION.PROJECT_MANAGE)
 
   const query = useApiQuery<ProjectResponse | null>(
     () => (id ? getProject(id) : Promise.resolve(null)),
@@ -152,9 +161,31 @@ export function ProjectDetailsPage() {
     )
   }
 
+  const projectId = project.id
   const villagesLoading = villageLoad.districtId === project.districtId && villageLoad.isLoading
   const villagesError =
     villageLoad.districtId === project.districtId ? villageLoad.error : null
+
+  async function handleStatusChange() {
+    if (!statusAction || mutation.isLoading) {
+      return
+    }
+    try {
+      await mutation.mutate(() =>
+        statusAction === 'close' ? closeProject(projectId) : reopenProject(projectId),
+      )
+      dispatch(
+        addToast({
+          variant: 'success',
+          message: statusAction === 'close' ? 'Project closed.' : 'Project reopened.',
+        }),
+      )
+      setStatusAction(null)
+      query.reload()
+    } catch {
+      // The mutation keeps a safe error message for the alert below.
+    }
+  }
 
   return (
     <>
@@ -177,14 +208,65 @@ export function ProjectDetailsPage() {
             >
               Originating proposal
             </LinkButton>
+            {canManage ? (
+              <LinkButton
+                to={`/projects/${project.id}/edit`}
+                variant="outline"
+                leftIcon={<Pencil aria-hidden="true" className="h-4 w-4" />}
+              >
+                Edit project
+              </LinkButton>
+            ) : null}
+            {canManage && project.status === 'ACTIVE' ? (
+              <Button
+                variant="outline"
+                leftIcon={<Lock aria-hidden="true" className="h-4 w-4" />}
+                onClick={() => setStatusAction('close')}
+              >
+                Close project
+              </Button>
+            ) : null}
+            {canManage && project.status === 'CLOSED' ? (
+              <Button
+                variant="outline"
+                leftIcon={<RotateCcw aria-hidden="true" className="h-4 w-4" />}
+                onClick={() => setStatusAction('reopen')}
+              >
+                Reopen project
+              </Button>
+            ) : null}
           </>
         }
       />
 
-      <Alert variant="info" title="Read-only project" className="mb-4">
-        This project was created automatically when its proposal was approved. It cannot be
-        created, edited or deleted from the project register.
-      </Alert>
+      {mutation.error ? (
+        <Alert
+          variant="error"
+          title={statusAction === 'close' ? 'The project was not closed' : 'The project was not reopened'}
+          className="mb-4"
+        >
+          {mutation.error.message}
+        </Alert>
+      ) : null}
+
+      {project.status === 'CLOSED' ? (
+        <Alert variant="warning" title="Project closed" className="mb-4">
+          This project is closed and read-only. Reopen it to correct its details again. The
+          originating proposal and its approval record never change.
+        </Alert>
+      ) : canManage ? (
+        <Alert variant="info" title="Project register" className="mb-4">
+          This project was created automatically when its proposal was approved. You may correct
+          its details, close it or reopen it; the code, originating proposal and approval facts
+          stay unchanged and every change is audited.
+        </Alert>
+      ) : (
+        <Alert variant="info" title="Read-only project" className="mb-4">
+          This project was created automatically when its proposal was approved. Editing and
+          closing need the PROJECT_MANAGE permission; ask an administrator if a correction is
+          needed.
+        </Alert>
+      )}
 
       <Card className="mb-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -394,6 +476,22 @@ export function ProjectDetailsPage() {
             : []),
         ]}
       />
+
+      {statusAction ? (
+        <ConfirmDialog
+          title={statusAction === 'close' ? 'Close this project?' : 'Reopen this project?'}
+          message={
+            statusAction === 'close'
+              ? 'A closed project is read-only. You can reopen it later; nothing is deleted and the audit trail keeps both changes.'
+              : 'The project becomes active and editable again. The audit trail keeps both changes.'
+          }
+          confirmLabel={statusAction === 'close' ? 'Close project' : 'Reopen project'}
+          variant={statusAction === 'close' ? 'danger' : 'primary'}
+          isLoading={mutation.isLoading}
+          onConfirm={handleStatusChange}
+          onClose={() => setStatusAction(null)}
+        />
+      ) : null}
     </>
   )
 }

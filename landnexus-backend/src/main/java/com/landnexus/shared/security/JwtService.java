@@ -25,6 +25,11 @@ public class JwtService {
     }
 
     public String createAccessToken(UUID userId, String username, Collection<String> authorities, Instant now) {
+        return createAccessToken(userId, username, authorities, 0, now);
+    }
+
+    public String createAccessToken(UUID userId, String username, Collection<String> authorities,
+                                    long authorizationVersion, Instant now) {
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
                 .subject(userId.toString())
@@ -33,6 +38,7 @@ public class JwtService {
                 .id(UUID.randomUUID().toString())
                 .claim("username", username)
                 .claim("authorities", List.copyOf(authorities))
+                .claim("authorization_version", authorizationVersion)
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

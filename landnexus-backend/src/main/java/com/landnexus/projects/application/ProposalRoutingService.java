@@ -132,7 +132,9 @@ public class ProposalRoutingService {
         }
         assignment.setStatus(ProposalAssignment.REASSIGNED);
         assignment.setCompletedAt(now);
-        assignments.save(assignment);
+        // Flush the status change before inserting the replacement: the partial unique index allows only one
+        // open assignment per proposal/stage, and Hibernate would otherwise insert before the UPDATE runs.
+        assignments.saveAndFlush(assignment);
         ProposalAssignment replacement = create(proposal, ProposalAssignment.STAGE_SCRUTINY, actor.userId(),
                 actor.username(), "Reassigned to the officer who started scrutiny", now);
         markInProgress(replacement, now);
@@ -168,7 +170,7 @@ public class ProposalRoutingService {
         return true;
     }
 
-    private static boolean levelAllowed(String required, String actual) {
+    static boolean levelAllowed(String required, String actual) {
         return switch (required) {
             case "DISTRICT" -> "DISTRICT".equals(actual);
             case "CENTRAL" -> "CENTRAL".equals(actual);

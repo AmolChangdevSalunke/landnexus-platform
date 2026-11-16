@@ -1,9 +1,10 @@
 package com.landnexus.administration.application;
 
-import com.landnexus.administration.api.dto.RoleResponse;
 import com.landnexus.administration.api.dto.UserCreateRequest;
 import com.landnexus.administration.api.dto.UserResponse;
 import com.landnexus.administration.api.dto.UserRolesRequest;
+import com.landnexus.administration.api.dto.UserProfileUpdateRequest;
+import com.landnexus.administration.domain.Permission;
 import com.landnexus.administration.domain.Role;
 import com.landnexus.administration.domain.UserAccount;
 import com.landnexus.administration.infrastructure.RefreshTokenRepository;
@@ -19,7 +20,6 @@ import com.landnexus.shared.security.CurrentActor;
 import com.landnexus.shared.validation.PasswordPolicy;
 import com.landnexus.shared.validation.TextNormalizer;
 import java.time.Clock;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     static final String SUPER_ADMIN = "SUPER_ADMIN";
+    private static final Set<String> NATIONAL_ROLES = Set.of("SUPER_ADMIN", "CENTRAL_ADMIN", "MINISTRY_ADMIN", "AUDITOR");
+    private static final Set<String> NATIONAL_ADMIN_ROLES = Set.of("SUPER_ADMIN", "CENTRAL_ADMIN", "MINISTRY_ADMIN");
 
     private final UserAccountRepository users;
     private final RoleRepository roles;
@@ -64,11 +66,23 @@ public class UserService {
         return UserResponse.from(find(id));
     }
 
-    public List<RoleResponse> listRoles() {
-        return roles.findAll().stream()
-                .sorted(Comparator.comparing(Role::getCode))
-                .map(RoleResponse::from)
-                .toList();
+    @Transactional
+    public UserResponse updateProfile(UUID id, UserProfileUpdateRequest request, CurrentActor actor) {
+        UserAccount user = find(id);
+        guardTarget(user, actor);
+        String email = TextNormalizer.email(request.email());
+        String fullName = TextNormalizer.name(request.fullName());
+        if (users.existsByEmailAndIdNot(email, id)) {
+            throw new DuplicateResourceException("Email already exists: " + email);
+        }
+        user.setEmail(email);
+        user.setFullName(fullName);
+        user.setUpdatedBy(actor.username());
+        user.invalidateAuthorization();
+        UserAccount saved = users.saveAndFlush(user);
+        audit.record("UPDATE_PROFILE", "UserAccount", id,
+                "username=" + saved.getUsername() + ", fields=email,fullName");
+        return UserResponse.from(saved);
     }
 
     @Transactional
@@ -107,6 +121,7 @@ public class UserService {
         user.getRoles().clear();
         user.getRoles().addAll(assigned);
         user.setUpdatedBy(actor.username());
+        user.invalidateAuthorization();
         UserAccount saved = users.saveAndFlush(user);
         audit.record("UPDATE_ROLES", "UserAccount", id,
                 "username=" + saved.getUsername() + ", roles: " + before + " -> " + saved.roleCodes());
@@ -122,6 +137,7 @@ public class UserService {
         }
         user.setEnabled(enabled);
         user.setUpdatedBy(actor.username());
+        user.invalidateAuthorization();
         UserAccount saved = users.saveAndFlush(user);
         if (!enabled) {
             refreshTokens.revokeAllForUser(id, clock.instant());
@@ -138,6 +154,18 @@ public class UserService {
                     .orElseThrow(() -> new InvalidRequestException("Unknown role: " + code));
             if (SUPER_ADMIN.equals(code) && !actor.hasRole(SUPER_ADMIN)) {
                 throw new AccessDeniedException("Only a SUPER_ADMIN can grant the SUPER_ADMIN role");
+            }
+            if (NATIONAL_ROLES.contains(code) && !actor.hasRole(SUPER_ADMIN)
+                    && !actor.hasRole("CENTRAL_ADMIN") && !actor.hasRole("MINISTRY_ADMIN")) {
+                throw new AccessDeniedException("Only a national administrator can grant the " + code + " role");
+            }
+            if (!actor.hasRole(SUPER_ADMIN)) {
+                Set<String> unavailable = role.getPermissions().stream().map(Permission::getCode)
+                        .filter(permission -> !actor.hasAuthority(permission)).collect(java.util.stream.Collectors.toSet());
+                if (!unavailable.isEmpty()) {
+                    throw new AccessDeniedException("You cannot assign a role with permissions you do not hold: "
+                            + new java.util.TreeSet<>(unavailable));
+                }
             }
             result.add(role);
         }

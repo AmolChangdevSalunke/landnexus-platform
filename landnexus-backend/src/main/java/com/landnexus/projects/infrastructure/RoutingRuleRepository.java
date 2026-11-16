@@ -8,4 +8,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RoutingRuleRepository extends JpaRepository<RoutingRule, UUID> {
 
     List<RoutingRule> findByActiveTrueOrderByMinAreaHaAsc();
+
+    List<RoutingRule> findAllByOrderByMinAreaHaAscNameAsc();
+
+    boolean existsByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCaseAndIdNot(String name, UUID id);
+
+    long countByActiveTrue();
 }

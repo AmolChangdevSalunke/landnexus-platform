@@ -33,6 +33,8 @@ export function useMonitoringScope(): MonitoringScope {
           }
           // A district belongs to one state, so a state change resets it.
           next.delete('districtId')
+          next.delete('talukaId')
+          next.delete('projectId')
           return next
         },
         { replace: true },
@@ -51,6 +53,8 @@ export function useMonitoringScope(): MonitoringScope {
           } else {
             next.delete('districtId')
           }
+          next.delete('talukaId')
+          next.delete('projectId')
           return next
         },
         { replace: true },
@@ -70,6 +74,8 @@ export function useMonitoringScope(): MonitoringScope {
           } else {
             next.delete('districtId')
           }
+          next.delete('talukaId')
+          next.delete('projectId')
           return next
         },
         { replace: true },
@@ -84,6 +90,8 @@ export function useMonitoringScope(): MonitoringScope {
         const next = new URLSearchParams(current)
         next.delete('stateId')
         next.delete('districtId')
+        next.delete('talukaId')
+        next.delete('projectId')
         return next
       },
       { replace: true },

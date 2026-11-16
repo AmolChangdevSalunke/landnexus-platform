@@ -4,6 +4,7 @@ import com.landnexus.compensation.domain.CompTypes.EntitlementStatus;
 import com.landnexus.compensation.domain.CompTypes.PaymentStatus;
 import com.landnexus.compensation.domain.CompTypes.RrBenefitKind;
 import com.landnexus.compensation.domain.CompTypes.RrCaseStatus;
+import com.landnexus.compensation.domain.PaymentChannel;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
@@ -26,9 +27,14 @@ public final class PaymentRrDtos {
 
     /** No bank details and no names: the beneficiary is only an id. mode is always SIMULATED. */
     public record PaymentResponse(UUID id, UUID valuationId, UUID caseId, UUID caseParcelId, UUID landownerId,
-                                  BigDecimal sharePercent, BigDecimal amount, PaymentStatus status, String mode,
+                                  BigDecimal sharePercent, BigDecimal amount, PaymentStatus status, PaymentChannel paymentChannel,
+                                  String mode,
                                   String reference, String failureReason, int attemptCount, Instant releasedAt,
                                   Instant confirmedAt, List<String> availableActions) {
+    }
+
+    /** A reporting label only. Every channel remains simulated and performs no external transfer. */
+    public record PaymentGenerationRequest(@NotNull PaymentChannel paymentChannel) {
     }
 
     public record PaymentEventResponse(UUID id, PaymentStatus fromStatus, PaymentStatus toStatus, String event,

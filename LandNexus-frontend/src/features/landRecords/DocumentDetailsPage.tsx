@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, FileUp, ShieldCheck, XCircle } from 'lucide-react'
+import { ArrowLeft, Download, Eye, FileUp, ShieldCheck, XCircle } from 'lucide-react'
 import { useAppDispatch } from '../../app/hooks'
 import { addToast } from '../../app/toastsSlice'
 import { downloadDocumentVersion, getDocument, getParcel } from '../../api/landRecords'
@@ -23,6 +23,7 @@ import { saveBlob } from '../../utils/download'
 import { formatDateTime, shortId } from '../../utils/format'
 import { PERMISSION } from '../../utils/permissions'
 import { useAuth } from '../auth/useAuth'
+import { DocumentPreviewDialog, isPreviewable } from './DocumentPreviewDialog'
 import { DocumentDecisionDialog, UploadVersionDialog } from './DocumentsTab'
 import {
   DOCUMENT_CATEGORY_LABELS,
@@ -57,6 +58,7 @@ export function DocumentDetailsPage() {
     outcome: 'VERIFIED' | 'REJECTED'
   } | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null)
 
   const documentQuery = useApiQuery<DocumentResponse | null>(
     () => (id ? getDocument(id) : Promise.resolve(null)),
@@ -303,14 +305,25 @@ export function DocumentDetailsPage() {
                 </code>
                 <CopyButton value={current.sha256} label="SHA-256 checksum" />
               </p>
-              <Button
-                variant="outline"
-                isLoading={downloading === `${document.id}:${current.versionNo}`}
-                onClick={() => void download(document, current)}
-                leftIcon={<Download aria-hidden="true" className="h-4 w-4" />}
-              >
-                Download current version
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {isPreviewable(current.contentType) ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setPreviewVersion(current)}
+                    leftIcon={<Eye aria-hidden="true" className="h-4 w-4" />}
+                  >
+                    Preview current version
+                  </Button>
+                ) : null}
+                <Button
+                  variant="outline"
+                  isLoading={downloading === `${document.id}:${current.versionNo}`}
+                  onClick={() => void download(document, current)}
+                  leftIcon={<Download aria-hidden="true" className="h-4 w-4" />}
+                >
+                  Download current version
+                </Button>
+              </div>
             </div>
           ) : (
             <p className="mt-4 text-sm text-slate-600">No file version is recorded.</p>
@@ -352,19 +365,38 @@ export function DocumentDetailsPage() {
                       SHA-256 {version.sha256}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    isLoading={downloading === `${document.id}:${version.versionNo}`}
-                    onClick={() => void download(document, version)}
-                  >
-                    Download v{version.versionNo}
-                  </Button>
+                  <div className="flex flex-wrap gap-1">
+                    {isPreviewable(version.contentType) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPreviewVersion(version)}
+                      >
+                        Preview v{version.versionNo}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      isLoading={downloading === `${document.id}:${version.versionNo}`}
+                      onClick={() => void download(document, version)}
+                    >
+                      Download v{version.versionNo}
+                    </Button>
+                  </div>
                 </li>
               ))}
           </ul>
         )}
       </Card>
+
+      {previewVersion ? (
+        <DocumentPreviewDialog
+          documentId={document.id}
+          version={previewVersion}
+          onClose={() => setPreviewVersion(null)}
+        />
+      ) : null}
 
       {versionTarget ? (
         <UploadVersionDialog

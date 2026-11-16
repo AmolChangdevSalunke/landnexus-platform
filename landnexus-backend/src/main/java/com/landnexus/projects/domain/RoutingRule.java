@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -45,6 +46,32 @@ public class RoutingRule {
     private Instant createdAt;
 
     protected RoutingRule() {
+    }
+
+    public RoutingRule(String name, BigDecimal minAreaHa, BigDecimal maxAreaHa, String projectType,
+                       String decisionLevel, String note) {
+        update(name, minAreaHa, maxAreaHa, projectType, decisionLevel, note);
+    }
+
+    public void update(String name, BigDecimal minAreaHa, BigDecimal maxAreaHa, String projectType,
+                       String decisionLevel, String note) {
+        this.name = name;
+        this.minAreaHa = minAreaHa;
+        this.maxAreaHa = maxAreaHa;
+        this.projectType = projectType;
+        this.decisionLevel = decisionLevel;
+        this.note = note;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
     }
 
     public UUID getId() { return id; }

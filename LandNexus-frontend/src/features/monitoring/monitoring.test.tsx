@@ -186,6 +186,9 @@ describe('Monitoring dashboard', () => {
       await screen.findByText(/simulated payment/i),
     ).toBeInTheDocument()
     expect(screen.getByText(/no real money transferred/i)).toBeInTheDocument()
+    expect(await screen.findByText('Payment channel analytics')).toBeInTheDocument()
+    expect(screen.getByText('PFMS · simulated')).toBeInTheDocument()
+    expect(screen.getByText('DBT · simulated')).toBeInTheDocument()
   })
 
   it('shows restricted finance without inventing amounts when the role lacks valuation access', async () => {
@@ -234,6 +237,10 @@ describe('Monitoring dashboard', () => {
 
     await waitFor(() =>
       expect(seen.some((url) => url.searchParams.get('districtId') === DISTRICT.id)).toBe(true),
+    )
+    await userEvent.selectOptions(screen.getByLabelText('Proposal status'), 'SUBMITTED')
+    await waitFor(() =>
+      expect(seen.some((url) => url.searchParams.get('proposalStatus') === 'SUBMITTED')).toBe(true),
     )
   })
 

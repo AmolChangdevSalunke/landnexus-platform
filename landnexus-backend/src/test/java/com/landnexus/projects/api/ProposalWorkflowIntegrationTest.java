@@ -115,8 +115,8 @@ class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest 
         String casesByProject = "SELECT id FROM acquisition_cases WHERE project_id IN (" + projectsByOwner + ")";
         jdbc.update("DELETE FROM case_villages WHERE case_id IN (" + casesByProject + ")", like);
         jdbc.update("DELETE FROM field_surveys WHERE case_id IN (" + casesByProject + ")", like);
-        jdbc.update("DELETE FROM parcel_owners WHERE parcel_id IN (SELECT id FROM affected_parcels WHERE case_id IN (" + casesByProject + "))", like);
-        jdbc.update("DELETE FROM affected_parcels WHERE case_id IN (" + casesByProject + ")", like);
+        jdbc.update("DELETE FROM case_parcel_owners WHERE case_parcel_id IN (SELECT id FROM case_parcels WHERE case_id IN (" + casesByProject + "))", like);
+        jdbc.update("DELETE FROM case_parcels WHERE case_id IN (" + casesByProject + ")", like);
         try {
             jdbc.execute("ALTER TABLE acquisition_case_history DISABLE TRIGGER trg_case_history_append_only");
             jdbc.update("DELETE FROM acquisition_case_history WHERE case_id IN (" + casesByProject + ")", like);
@@ -136,6 +136,7 @@ class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest 
             jdbc.execute("ALTER TABLE proposal_status_history ENABLE TRIGGER trg_proposal_status_history_append_only");
             jdbc.execute("ALTER TABLE proposal_versions ENABLE TRIGGER trg_proposal_versions_append_only");
         }
+        jdbc.update("DELETE FROM proposal_assignments WHERE proposal_id IN (SELECT id FROM proposals WHERE owner_user_id IN " + owners + ")", like);
         jdbc.update("DELETE FROM proposals WHERE owner_user_id IN " + owners, like);
         jdbc.update("DELETE FROM user_geographic_scopes WHERE user_id IN " + owners, like);
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id IN " + owners, like);
@@ -423,7 +424,7 @@ class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest 
         String id = createProposal(consultantToken);
         expect(act(consultantToken, id, "submit", null), 200);
 
-        MvcResult mine = mockMvc.perform(get("/api/v1/notifications").header("Authorization", officerToken)
+        MvcResult mine = mockMvc.perform(get("/api/v1/notifications").header("Authorization", dualToken)
                         .param("unreadOnly", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
@@ -432,10 +433,10 @@ class ProposalWorkflowIntegrationTest extends AbstractIsolatedPgIntegrationTest 
 
         mockMvc.perform(post("/api/v1/notifications/" + notificationId + "/read").header("Authorization", consultantToken))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(post("/api/v1/notifications/" + notificationId + "/read").header("Authorization", officerToken))
+        mockMvc.perform(post("/api/v1/notifications/" + notificationId + "/read").header("Authorization", dualToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.read").value(true));
-        mockMvc.perform(get("/api/v1/notifications/unread-count").header("Authorization", officerToken))
+        mockMvc.perform(get("/api/v1/notifications/unread-count").header("Authorization", dualToken))
                 .andExpect(jsonPath("$.unread").value(0));
     }
 

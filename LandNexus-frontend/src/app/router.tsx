@@ -8,6 +8,7 @@ import { NoAccessPage } from '../features/auth/NoAccessPage'
 import { MyWorkPage } from '../features/myWork/MyWorkPage'
 import { NotificationListPage } from '../features/notifications/NotificationListPage'
 import { ProjectDetailsPage } from '../features/projects/ProjectDetailsPage'
+import { ProjectEditPage } from '../features/projects/ProjectEditPage'
 import { ProjectListPage } from '../features/projects/ProjectListPage'
 import { ProposalDetailsPage } from '../features/proposals/ProposalDetailsPage'
 import { ProposalFormPage } from '../features/proposals/ProposalFormPage'
@@ -39,6 +40,7 @@ import { MasterDataPage } from '../features/admin/master/MasterDataPage'
 import { AuditTrailPage } from '../features/admin/users/AuditTrailPage'
 import { LoginHistoryPage } from '../features/admin/users/LoginHistoryPage'
 import { RolesPage } from '../features/admin/users/RolesPage'
+import { RoutingRulesPage } from '../features/admin/RoutingRulesPage'
 import { UsersPage } from '../features/admin/users/UsersPage'
 import { RoadmapPage } from '../features/roadmap/RoadmapPage'
 import { DashboardPage } from '../features/monitoring/DashboardPage'
@@ -112,6 +114,15 @@ export function AppRoutes() {
             element={
               <RequirePermission any={[...PROPOSAL_READ_ANY]}>
                 <ProjectDetailsPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="projects/:id/edit"
+            element={
+              <RequirePermission any={[PERMISSION.PROJECT_MANAGE]}>
+                <ProjectEditPage />
               </RequirePermission>
             }
           />
@@ -422,6 +433,15 @@ export function AppRoutes() {
             element={
               <RequirePermission any={[PERMISSION.USER_READ]}>
                 <RolesPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="admin/routing-rules"
+            element={
+              <RequirePermission any={[PERMISSION.ROUTING_RULE_READ]}>
+                <RoutingRulesPage />
               </RequirePermission>
             }
           />

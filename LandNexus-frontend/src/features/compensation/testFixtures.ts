@@ -155,6 +155,7 @@ export const PAYMENT: PaymentResponse = {
   sharePercent: 100,
   amount: VALUATION.totalAmount,
   status: 'INSTRUCTED',
+  paymentChannel: 'OTHER_SIMULATED',
   mode: 'SIMULATED',
   reference: null,
   failureReason: null,

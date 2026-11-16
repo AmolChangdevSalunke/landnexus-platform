@@ -33,14 +33,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import com.landnexus.support.AbstractIsolatedPgIntegrationTest;
 import org.junit.jupiter.api.AfterAll;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /** Real database, real filter chain, real tokens. Uses only synthetic DEMO data. */
 @SpringBootTest
-class LandRecordsIntegrationTest {
+@ActiveProfiles("integration")
+class LandRecordsIntegrationTest extends AbstractIsolatedPgIntegrationTest {
 
     private static final String PASSWORD = "Test-Passw0rd-123";
     private static final String ADMIN = "/api/v1/administration";

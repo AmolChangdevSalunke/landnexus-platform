@@ -4,12 +4,14 @@ import com.landnexus.reporting.api.dto.MonitoringDtos.AcquisitionStats;
 import com.landnexus.reporting.api.dto.MonitoringDtos.Dashboard;
 import com.landnexus.reporting.api.dto.MonitoringDtos.FinanceStats;
 import com.landnexus.reporting.api.dto.MonitoringDtos.LandStats;
+import com.landnexus.reporting.api.dto.MonitoringDtos.OperationalStats;
 import com.landnexus.reporting.api.dto.MonitoringDtos.ProjectStats;
 import com.landnexus.reporting.api.dto.MonitoringDtos.ProposalStats;
 import com.landnexus.reporting.api.dto.MonitoringDtos.StatusAmount;
 import com.landnexus.reporting.infrastructure.DashboardRepository;
 import com.landnexus.reporting.infrastructure.DashboardRepository.AcqParcelTotals;
 import com.landnexus.reporting.infrastructure.DashboardRepository.LandTotals;
+import com.landnexus.reporting.infrastructure.DashboardFilter;
 import com.landnexus.reporting.infrastructure.DistrictScope;
 import com.landnexus.shared.security.CurrentActor;
 import java.math.BigDecimal;
@@ -19,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,41 +44,66 @@ public class DashboardService {
     }
 
     public Dashboard dashboard(UUID stateId, UUID districtId, CurrentActor actor) {
-        DistrictScope scope = scopes.resolve(actor, stateId, districtId);
+        return dashboard(stateId, districtId, null, null, null, null, actor);
+    }
+
+    public Dashboard dashboard(UUID stateId, UUID districtId, UUID projectId, UUID talukaId,
+                               LocalDate fromDate, LocalDate toDate, CurrentActor actor) {
+        return dashboard(stateId, districtId, projectId, talukaId, fromDate, toDate, null, null, null, actor);
+    }
+
+    public Dashboard dashboard(UUID stateId, UUID districtId, UUID projectId, UUID talukaId,
+                               LocalDate fromDate, LocalDate toDate, String proposalStatus, String projectStatus,
+                               String acquisitionStatus, CurrentActor actor) {
+        DashboardFilter filter = scopes.resolveDashboard(actor, stateId, districtId, projectId, talukaId, fromDate, toDate,
+                proposalStatus, projectStatus, acquisitionStatus);
+        DistrictScope scope = filter.districts();
         String level = districtId != null ? "DISTRICT" : stateId != null ? "STATE" : scope.unrestricted() ? "NATIONAL" : "SCOPED";
 
-        Map<String, Long> proposals = repo.proposalsByStatus(scope);
-        Map<String, Long> projects = repo.projectsByStatus(scope);
-        LandTotals land = repo.landTotals(scope);
-        Map<String, Long> cases = repo.casesByStatus(scope);
-        AcqParcelTotals acquisitionParcels = repo.acquisitionParcels(scope);
+        Map<String, Long> proposals = repo.proposalsByStatus(filter);
+        Map<String, Long> projects = repo.projectsByStatus(filter);
+        LandTotals land = repo.landTotals(filter);
+        Map<String, Long> cases = repo.casesByStatus(filter);
+        AcqParcelTotals acquisitionParcels = repo.acquisitionParcels(filter);
 
         FinanceStats finance = null;
         if (actor.hasAuthority("VALUATION_READ")) {
-            List<StatusAmount> payments = actor.hasAuthority("PAYMENT_READ") ? repo.paymentsByStatus(scope) : null;
-            Map<String, Long> rr = actor.hasAuthority("RR_READ") ? repo.rrCasesByStatus(scope) : null;
-            finance = new FinanceStats(repo.estimatesByStatus(scope), payments, rr, payments == null ? null : "SIMULATED");
+            List<StatusAmount> payments = actor.hasAuthority("PAYMENT_READ") ? repo.paymentsByStatus(filter) : null;
+            Map<String, Long> rr = actor.hasAuthority("RR_READ") ? repo.rrCasesByStatus(filter) : null;
+            Map<String, List<StatusAmount>> rails = actor.hasAuthority("PAYMENT_READ")
+                    ? repo.paymentsByChannel(filter) : null;
+            finance = new FinanceStats(repo.estimatesByStatus(filter), payments, rr,
+                    rails == null ? null : rails.get("PFMS_SIMULATED"),
+                    rails == null ? null : rails.get("DBT_SIMULATED"),
+                    payments == null ? null : "SIMULATED", rails);
         }
 
         List<String> notes = new ArrayList<>();
         notes.add("Counts include only records inside your geographic scope.");
         notes.add("Months are counted in Asia/Kolkata time.");
+        if (projectId != null || talukaId != null || fromDate != null || toDate != null) {
+            notes.add("Dashboard measures use the selected project, taluka and inclusive Asia/Kolkata date filters.");
+            notes.add("District comparisons and trends honor the selected project, taluka, date and status filters.");
+        }
         if (finance == null) {
             notes.add("Compensation figures are hidden: they need the valuation permission.");
         } else if (finance.payments() != null) {
             notes.add("All payment figures are SIMULATED: no real money has moved.");
+            notes.add("PFMS, DBT and other channel values are explicitly classified simulated records; no external payment service is connected.");
         }
 
         return new Dashboard(clock.instant(), level, stateId, districtId,
                 new ProposalStats(proposals, sum(proposals), get(proposals, "SUBMITTED") + get(proposals, "UNDER_SCRUTINY"),
                         get(proposals, "RECOMMENDED"), get(proposals, "APPROVED"), get(proposals, "REJECTED")),
-                new ProjectStats(projects, sum(projects), repo.projectsAreaHa(scope)),
+                new ProjectStats(projects, sum(projects), repo.projectsAreaHa(filter)),
                 new LandStats(land.activeParcels(), land.areaHa(), land.withBoundary(), percent(land.withBoundary(), land.activeParcels()),
-                        repo.documentsPendingVerification(scope)),
+                        repo.documentsPendingVerification(filter)),
                 new AcquisitionStats(cases, sum(cases), sum(cases) - get(cases, "CLOSED") - get(cases, "CANCELLED"),
-                        acquisitionParcels.parcels(), acquisitionParcels.areaToAcquireHa(), repo.surveysByStatus(scope),
-                        repo.objectionsByStatus(scope), repo.awardsDeclared(scope), repo.possessionsRecorded(scope)),
-                finance, repo.trend(scope), repo.districtRows(scope), List.copyOf(notes));
+                        acquisitionParcels.parcels(), acquisitionParcels.areaToAcquireHa(), repo.surveysByStatus(filter),
+                        repo.objectionsByStatus(filter), repo.awardsDeclared(filter), repo.possessionsRecorded(filter)),
+                finance, new OperationalStats(repo.gisConflicts(filter), repo.pendingTasks(filter),
+                        repo.escalationsByLevel(filter), actor.hasAuthority("USER_READ") ? repo.officerWorkload(filter) : null),
+                repo.trend(filter), repo.districtRows(filter), List.copyOf(notes));
     }
 
     private static long get(Map<String, Long> map, String key) {

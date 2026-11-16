@@ -1,11 +1,13 @@
 package com.landnexus.reporting.infrastructure;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -25,12 +27,30 @@ public class ReportRepository {
         this.named = named;
     }
 
-    public RowPage run(String view, List<String> columns, String statusColumn, String status, DistrictScope scope,
-                       String orderBy, int limit, int offset) {
-        String where = " WHERE 1=1" + scope.sql("district_id") + (status == null ? "" : " AND " + statusColumn + " = :status");
+    public RowPage run(String view, List<String> columns, String statusColumn, String status, String dateColumn,
+                       String projectIdColumn, String talukaIdsColumn, LocalDate fromDate, LocalDate toDate,
+                       UUID projectId, UUID talukaId, DistrictScope scope, String orderBy, int limit, int offset) {
+        StringBuilder where = new StringBuilder(" WHERE 1=1").append(scope.sql("district_id"));
         Map<String, Object> params = new HashMap<>(scope.params());
         if (status != null) {
+            where.append(" AND ").append(statusColumn).append(" = :status");
             params.put("status", status);
+        }
+        if (fromDate != null) {
+            where.append(" AND DATE(").append(dateColumn).append(" AT TIME ZONE 'Asia/Kolkata') >= :fromDate");
+            params.put("fromDate", fromDate);
+        }
+        if (toDate != null) {
+            where.append(" AND DATE(").append(dateColumn).append(" AT TIME ZONE 'Asia/Kolkata') <= :toDate");
+            params.put("toDate", toDate);
+        }
+        if (projectId != null) {
+            where.append(" AND ").append(projectIdColumn).append(" = :projectId");
+            params.put("projectId", projectId);
+        }
+        if (talukaId != null) {
+            where.append(" AND :talukaId = ANY(").append(talukaIdsColumn).append(')');
+            params.put("talukaId", talukaId);
         }
         Long total = named.queryForObject("SELECT COUNT(*) FROM " + view + where, params, Long.class);
         params.put("limit", limit);
