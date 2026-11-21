@@ -1,5 +1,6 @@
 package com.landnexus.shared.security;
 
+import com.landnexus.shared.logging.UserContextFilter;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
@@ -31,6 +32,7 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -133,7 +135,10 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter))
                         .authenticationEntryPoint(errorHandlers)
-                        .accessDeniedHandler(errorHandlers));
+                        .accessDeniedHandler(errorHandlers))
+                // Runs after the bearer token is validated, so the opaque user id can be attached to every
+                // subsequent log line without ever touching the token itself.
+                .addFilterAfter(new UserContextFilter(), BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 
@@ -143,7 +148,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(allowedOrigins));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
+        configuration.setExposedHeaders(List.of("X-Request-Id"));
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);

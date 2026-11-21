@@ -139,7 +139,7 @@ File type is decided from the file's magic bytes, not its extension. Downloads a
 |---|---|---|
 | Acquisition | `/acquisition` | Cases, case villages, case parcels, assignments, surveys, verification, notices, objections, awards, possession and closure. |
 | Compensation | `/compensation` | Rate cards, rule sets, assets, valuations, SIMULATED payments, R&R cases/entitlements. |
-| GIS | `/gis` | Parcel boundaries, project alignments, conflicts and map data. Imagery endpoints report configuration/status only. |
+| GIS | `/gis` | Parcel boundaries, project alignments, conflicts and map data, plus the backend-only Bhuvan LULC/village endpoints. Imagery endpoints report configuration/status only. |
 
 Key acquisition endpoints are listed by the generated OpenAPI document; lifecycle actions are guarded by acquisition permissions and case/geographic scope.
 Confirmed simulated payments can be downloaded from `GET /compensation/payments/{id}/receipt` (`PAYMENT_READ`). The text receipt is marked SIMULATED and is served with `Cache-Control: no-store`; it does not contain bank details.
@@ -156,6 +156,23 @@ The interactive frontend map uses the existing scoped GeoJSON APIs such as `GET 
 | `GET` | `/gis/projects/{projectId}/map` | `GIS_READ` | Return map features including project alignment/corridor and affected parcels. |
 
 OpenStreetMap provides the fallback basemap. These APIs do not imply a verified Bhuvan connection or authoritative boundary coverage; GIS operations remain subject to backend geographic scope checks.
+
+### ISRO Bhuvan LULC and village endpoints
+
+These endpoints are additive to the existing GIS module and require `GIS_READ`. The Bhuvan token is read only from backend configuration (`BHUVAN_API_TOKEN`) and is never sent to the browser.
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| `GET` | `/gis/bhuvan/status` | `GIS_READ` | Enabled/token/coverage status; never returns the token. |
+| `POST` | `/gis/bhuvan/lulc/aoi` | `GIS_READ` | Run a Bhuvan LULC AOI analysis from `{projectId}` (current corridor) or `{wkt}` (Polygon/MultiPolygon inside India). |
+| `GET` | `/gis/bhuvan/history?projectId=&page=&size=` | `GIS_READ` | Stored analyses, including failed attempts. |
+| `GET` | `/gis/bhuvan/history/{id}` | `GIS_READ` | One stored analysis with normalised records and class totals. |
+| `GET` | `/gis/bhuvan/history/{id}/export.csv` | `GIS_READ` | CSV export of the stored answer. |
+| `GET` | `/gis/bhuvan/history/{id}/export.pdf` | `GIS_READ` | PDF export of the stored answer. |
+| `GET` | `/gis/bhuvan/villages/geocode?village=&stateCode=` | `GIS_READ` | Village geocoding for the states documented by Bhuvan (AP, KA). |
+| `GET` | `/gis/bhuvan/villages/reverse?lat=&lon=&stateCode=` | `GIS_READ` | Village reverse geocoding for the documented states. |
+
+Bhuvan documents village geocoding for Andhra Pradesh and Karnataka only. Maharashtra is refused with HTTP 400 unless `LANDNEXUS_BHUVAN_MAHARASHTRA_VILLAGE_VERIFIED=true` is set after a real successful check. An invalid token is returned by Bhuvan as HTTP 200 with an `error` object; the backend reports it as `AUTHENTICATION_FAILED` (HTTP 502) rather than as data. Provider errors are bounded and never include the token or full request URL.
 
 ---
 
@@ -193,3 +210,17 @@ MIS report run and CSV export endpoints accept optional `stateId`, `districtId`,
 - Added protected simulated payment receipt download.
 
 No existing endpoint was removed or renamed.
+
+---
+
+## 9. Request correlation and logging
+
+Every API request accepts an optional `X-Request-Id` header and always returns one. The backend records it in the
+console/JSON log context together with the method, path, status, duration and (after authentication) the opaque user
+id. Exceptions are logged once by the central exception handler with a stack trace; the request filter only adds the
+HTTP result. Tokens, passwords, authorization headers, cookies and request/response bodies are never logged.
+
+Frontend API calls generate the same header and include it in failure logs, so one browser action can be followed
+across the React client and the backend. Use the returned id when reporting a problem; do not attach credentials or
+personal data. Production (`SPRING_PROFILES_ACTIVE=prod`) writes rotated `logs/landnexus.log` and
+`logs/landnexus.jsonl`; levels and the directory are controlled by `LANDNEXUS_LOG_*` variables.

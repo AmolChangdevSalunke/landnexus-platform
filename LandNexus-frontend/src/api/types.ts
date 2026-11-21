@@ -1747,3 +1747,85 @@ export interface ForecastOverview {
   itemsTruncated: boolean
   notes: string[]
 }
+
+/* ------------------------------------------------------------------ */
+/* ISRO Bhuvan API (LULC and village lookups, via the backend)         */
+/* ------------------------------------------------------------------ */
+
+export interface BhuvanStatus {
+  enabled: boolean
+  tokenConfigured: boolean
+  lulcAvailable: boolean
+  villageGeocodingAvailable: boolean
+  maharashtraVillageVerified: boolean
+  documentedVillageStates: string[]
+  provider: string
+  message: string
+}
+
+export interface BhuvanLulcRecord {
+  year: string | null
+  description: string
+  areaSqKm: number | null
+  raw: Record<string, string>
+}
+
+export interface BhuvanLulcClass {
+  description: string
+  areaSqKm: number
+  records: number
+}
+
+export interface BhuvanLulcAnalysis {
+  runId: string
+  projectId: string | null
+  projectCode: string | null
+  stateCode: string | null
+  stateName: string | null
+  districtName: string | null
+  aoiSource: string
+  aoiAreaHa: number | null
+  status: 'SUCCESS' | 'NO_DATA' | 'FAILED'
+  message: string
+  fetchedAt: string
+  records: BhuvanLulcRecord[]
+  totals: BhuvanLulcClass[]
+  years: string[]
+  raw: unknown
+}
+
+export interface BhuvanHistoryItem {
+  runId: string
+  projectId: string | null
+  projectCode: string | null
+  stateCode: string | null
+  stateName: string | null
+  districtName: string | null
+  aoiSource: string
+  aoiAreaHa: number | null
+  status: 'SUCCESS' | 'NO_DATA' | 'FAILED'
+  message: string
+  recordCount: number
+  totalAreaSqKm: number | null
+  requestedByUsername: string
+  createdAt: string
+  resultAvailable: boolean
+}
+
+export interface BhuvanHistoryPage {
+  content: BhuvanHistoryItem[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export interface BhuvanVillageResult {
+  query: string
+  endpoint: string
+  stateCode: string
+  maharashtraVerified: boolean
+  coverageNote: string
+  recordCount: number
+  records: Record<string, unknown>[]
+}

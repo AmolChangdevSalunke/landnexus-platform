@@ -11,7 +11,10 @@ import {
 } from '../../api/client'
 import { fetchCurrentUser, loginRequest, logoutRequest } from '../../api/auth'
 import { toApiErrorInfo, type ApiErrorInfo } from '../../api/errors'
+import { createLogger } from '../../logging/logger'
 import type { CurrentUser, LoginRequest, TokenResponse } from '../../api/types'
+
+const log = createLogger('auth')
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'anonymous'
 
@@ -35,15 +38,19 @@ export const bootstrapSession = createAsyncThunk<
   { rejectValue: ApiErrorInfo }
 >('auth/bootstrap', async (_arg, { rejectWithValue }) => {
   if (!hasRefreshToken()) {
+    log.debug('No stored session to restore')
     return null
   }
 
   try {
     await refreshSession()
-    return await fetchCurrentUser()
+    const user = await fetchCurrentUser()
+    log.info('Session restored', { userId: user.id })
+    return user
   } catch (error) {
     clearSessionTokens()
     setSessionNotice('Your session expired. Please sign in again.')
+    log.warn('Session restore failed', { error })
     return rejectWithValue(toApiErrorInfo(error))
   }
 })
@@ -58,10 +65,12 @@ export const login = createAsyncThunk<
     setAccessToken(tokens.accessToken)
     setRefreshToken(tokens.refreshToken)
     const user = await fetchCurrentUser()
+    log.info('Login succeeded', { userId: user.id })
     return { user, tokens }
   } catch (error) {
     clearSessionTokens()
     const info = toApiErrorInfo(error)
+    log.warn('Login failed', { status: info.status })
     return rejectWithValue(
       info.status === 401 ? { ...info, message: 'Invalid username or password' } : info,
     )
@@ -78,6 +87,7 @@ export const logout = createAsyncThunk<void, void>('auth/logout', async () => {
     }
   }
   clearSessionTokens()
+  log.info('Logout completed')
 })
 
 const authSlice = createSlice({

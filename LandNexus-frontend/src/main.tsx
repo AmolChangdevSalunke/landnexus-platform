@@ -5,7 +5,11 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { store } from './app/store'
 import { bootstrapSession } from './features/auth/authSlice'
+import { installGlobalErrorHandlers, logger } from './logging/logger'
 import './index.css'
+
+installGlobalErrorHandlers()
+logger.info('Frontend starting', { detail: `mode=${import.meta.env.MODE}` })
 
 // Restore the session once at startup. The access token stays in memory; only
 // the per-tab refresh token is read from sessionStorage.

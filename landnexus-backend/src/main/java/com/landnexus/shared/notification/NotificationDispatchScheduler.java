@@ -25,13 +25,19 @@ public class NotificationDispatchScheduler {
     @Scheduled(initialDelayString = "${landnexus.notifications.dispatch-initial-delay-ms:15000}",
             fixedDelayString = "${landnexus.notifications.dispatch-interval-ms:5000}")
     public void run() {
+        long started = System.nanoTime();
         try {
             int sent = dispatcher.dispatchDue();
             if (sent > 0) {
-                log.info("Notification dispatcher sent {} message(s)", sent);
+                log.info("Notification dispatcher sent {} message(s) ({} ms)", sent,
+                        (System.nanoTime() - started) / 1_000_000L);
+            } else {
+                log.trace("Notification dispatch cycle found nothing to send ({} ms)",
+                        (System.nanoTime() - started) / 1_000_000L);
             }
         } catch (RuntimeException e) {
-            log.error("Notification dispatch cycle failed", e);
+            log.error("Notification dispatch cycle failed after {} ms",
+                    (System.nanoTime() - started) / 1_000_000L, e);
         }
     }
 }

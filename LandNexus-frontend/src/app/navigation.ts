@@ -68,6 +68,12 @@ export const NAV_GROUPS: NavGroup[] = [
         permissions: [PERMISSION.MASTER_DATA_READ],
       },
       {
+        label: 'Bhuvan analysis',
+        to: '/gis/analysis',
+        icon: BarChart3,
+        permissions: [PERMISSION.GIS_READ],
+      },
+      {
         label: 'Conflict workspace',
         to: '/gis/conflicts',
         icon: AlertTriangle,

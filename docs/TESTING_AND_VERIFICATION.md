@@ -1,6 +1,7 @@
 # Testing and Verification Record
 
-**Last updated:** 16 November 2026  
+**Last updated:** 18 November 2026
+
 **Rule:** this file records commands that were actually run and their actual output. A test is not “passing” because it exists.
 
 ---
@@ -181,6 +182,31 @@ Do not describe any of these as passing until they are actually run and recorded
 
 ---
 
+## 10. Bhuvan LULC and village integration — 18 Nov 2026
+
+The additive Bhuvan subpackage reuses the existing GIS permission/scope, project lookup, audit and CSV writer. The new migration is `V27__bhuvan_lulc_analysis.sql`.
+
+| Command/check | Actual result |
+|---|---|
+| `.\mvnw.cmd -q -DskipTests compile` | Exit 0 |
+| All non-`@SpringBootTest` backend classes (`-Dtest=<75 classes>`) | **75 files / 538 tests, 0 failures, 0 errors, 0 skipped** |
+| `.\mvnw.cmd -q "-Dtest=BhuvanClientTest,BhuvanServiceTest" test` | **29 tests, 0 failures, 0 errors** |
+| `npm test -- --run src/features/gis/BhuvanAnalysisPage.test.tsx` | **1 file / 7 tests passed** |
+| `npm test` | **51 files / 258 tests passed** |
+| `npm run build` | Exit 0; `tsc -b` passed, Vite transformed **2548 modules** (existing large-chunk advisory only) |
+| `scripts/verify-bhuvan.ps1` with no token | Printed `BHUVAN_API_TOKEN is not set; no authenticated call was made` and exited 1, as intended |
+| `scripts/verify-bhuvan.ps1` with a dummy token | Provider returned **HTTP 200** `{"error":"invalid_token","error_description":"The access token provided is invalid"}`; the script reported it as a provider error and exited 1 |
+| Real `BHUVAN_API_TOKEN` authenticated LULC run | **NOT RUN — token unavailable**; no LULC/village success is claimed |
+| Real Maharashtra project polygon through the backend | **NOT RUN**; requires the isolated database plus an authenticated backend session |
+| Isolated PostgreSQL / V27 migration / PostGIS corridor query | **NOT RUN** in this continuation; `LANDNEXUS_TEST_DB_*` was unset and Docker is unavailable |
+| Flyway V27 | **Not applied here**; do not infer database verification from compilation or mocked tests |
+
+The unit tests use a local `com.sun.net.httpserver` stand-in for Bhuvan and cover token placement, the HTTP-200 `invalid_token` body, bounded responses, provider status mapping, LULC parsing/totals/years, failed-history persistence, Maharashtra village gating and PDF/CSV output. They do not prove live provider behaviour.
+
+To close the remaining verification gap, set `BHUVAN_API_TOKEN` and run `scripts/verify-bhuvan.ps1` (direct provider check), then pass `-BackendBaseUrl/-BackendToken/-ProjectId` to exercise the stored project corridor through LandNexus. Record the actual output before changing the status in `docs/GOVERNMENT_INTEGRATION_STATUS.md`.
+
+---
+
 ## 7. Reproducing the verification
 
 ```powershell
@@ -213,3 +239,22 @@ The following focused permission tests were first run after the permission overr
 | **Total** | **55** | **0** | **0** | **0** |
 
 `LandNexus-frontend`: `npm test -- --run src/features/admin/users/UsersPage.test.tsx` passed 6 tests. Subsequently, after the dashboard analytics change, the complete backend suite passed 579 tests with no failures/errors/skips, the full frontend suite passed 50 files / 250 tests, and `npm run build` exited successfully. The full backend suite applied/validated migrations through V25.
+
+---
+
+## 11. Centralized logging verification - 19 Nov 2026
+
+The backend logging uses the SLF4J/Logback already included by Spring Boot; no new dependency was added. Configuration is `landnexus-backend/src/main/resources/logback-spring.xml`, with request-id/user-id filters, central exception logging, auth/CRUD/external-call logs, a JSON encoder and prod file rotation. Frontend logging is centralized in `LandNexus-frontend/src/logging/logger.ts`.
+
+| Command/check | Actual result |
+|---|---|
+| `.\mvnw.cmd -q -Dtest="com.landnexus.shared.logging.*Test" test` | **13 tests, 0 failures, 0 errors** |
+| All non-`@SpringBootTest` backend classes (`-Dtest=<80 selected classes>`) | **79 suites / 551 tests, 0 failures, 0 errors, 0 skipped** |
+| `npm test` | **52 files / 268 tests passed** (includes 10 logger tests) |
+| `npm run build` | Exit 0; TypeScript passed; Vite transformed **2549 modules** (existing large-chunk advisory only) |
+| App start with an unreachable PostgreSQL (`DB_URL` port 59999) | Spring Boot-style console lines observed, including `2026-11-19T00:22:54.576+05:30 INFO  14852 --- [landnexus] [main] [system] c.l.LandnexusBackendApplication : Starting ...` |
+| `SPRING_PROFILES_ACTIVE=prod` with `LANDNEXUS_LOG_DIR` | Created `landnexus.log` and `landnexus.jsonl`; JSON contained `"timestamp":"2026-11-18T18:55:18.402Z"`, `"service":"landnexus"`, `"environment":"prod"`, `"level":"INFO"`, `"loggerName"`, `"formattedMessage"` and `"mdc"` |
+| Sensitive-value tests | Passwords/tokens/API keys/Bearer/JWT/e-mail local parts and CR/LF injection are redacted before output |
+| Real authenticated API traffic | **NOT RUN here** (no isolated PostgreSQL); request/response/exception paths are covered by unit/MockMvc tests |
+
+The application-start probe used a deliberately unreachable database, so Flyway/DB startup failed as expected. The console pattern, profile switching, file creation, JSON schema and rotation policy were exercised; no live Bhuvan success is claimed.

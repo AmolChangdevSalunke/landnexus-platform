@@ -1,5 +1,8 @@
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
+import { createLogger, newRequestId } from '../logging/logger'
 import type { TokenResponse } from './types'
+
+const log = createLogger('api.client')
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8080/api/v1'
 
@@ -134,7 +137,12 @@ export function refreshSession(): Promise<TokenResponse> {
       setAccessToken(data.accessToken)
       setRefreshToken(data.refreshToken)
       sessionListener.onTokensRefreshed?.(data)
+      log.debug('Access token refreshed')
       return data
+    })
+    .catch((error: unknown) => {
+      log.warn('Token refresh failed', { error })
+      throw error
     })
     .finally(() => {
       refreshPromise = null
@@ -148,6 +156,7 @@ export function expireSession(): void {
   clearSessionTokens()
   if (hadSession) {
     setSessionNotice('Your session expired. Please sign in again.')
+    log.warn('Session expired; local credentials cleared')
   }
   sessionListener.onSessionExpired?.()
 }
@@ -158,6 +167,16 @@ export function expireSession(): void {
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean
+  _requestId?: string
+  _startedAt?: number
+}
+
+function requestEndpoint(config: InternalAxiosRequestConfig | undefined): string | undefined {
+  return config?.url?.split('?')[0]
+}
+
+function elapsedMs(config: RetryableRequestConfig | undefined): number | undefined {
+  return config?._startedAt === undefined ? undefined : Date.now() - config._startedAt
 }
 
 export const apiClient = axios.create({
@@ -177,6 +196,19 @@ apiClient.interceptors.request.use((config) => {
     config.headers = AxiosHeaders.from(config.headers)
     config.headers.set('Authorization', `Bearer ${token}`)
   }
+  const traced = config as RetryableRequestConfig
+  // One id per logical request; a 401 retry keeps the original id so the backend can correlate both calls.
+  if (!traced._requestId) {
+    traced._requestId = newRequestId()
+    traced._startedAt = Date.now()
+  }
+  config.headers = AxiosHeaders.from(config.headers)
+  config.headers.set('X-Request-Id', traced._requestId)
+  log.debug('API request started', {
+    requestId: traced._requestId,
+    method: config.method?.toUpperCase(),
+    endpoint: requestEndpoint(config),
+  })
   return config
 })
 
@@ -190,23 +222,51 @@ function isAuthEndpoint(url: string | undefined): boolean {
 apiClient.interceptors.response.use(
   (response) => {
     emitWindowEvent(NETWORK_OK_EVENT)
+    const config = response.config as RetryableRequestConfig
+    log.debug('API request completed', {
+      requestId: config._requestId,
+      method: config.method?.toUpperCase(),
+      endpoint: requestEndpoint(config),
+      status: response.status,
+      durationMs: elapsedMs(config),
+    })
     return response
   },
   async (error: unknown) => {
     if (!axios.isAxiosError(error)) {
+      log.error('API request failed with a non-HTTP error', { error })
       return Promise.reject(error)
     }
 
+    const config = error.config as RetryableRequestConfig | undefined
+
     if (!error.response) {
+      log.warn('API network failure', {
+        requestId: config?._requestId,
+        method: config?.method?.toUpperCase(),
+        endpoint: requestEndpoint(config),
+        durationMs: elapsedMs(config),
+        error,
+      })
       emitWindowEvent(NETWORK_ERROR_EVENT)
       return Promise.reject(error)
     }
 
-    if (error.response.status !== 401 || !error.config) {
+    const status = error.response.status
+    const level = status >= 500 ? 'error' : 'warn'
+    log[level]('API request failed', {
+      requestId: config?._requestId,
+      method: config?.method?.toUpperCase(),
+      endpoint: requestEndpoint(config),
+      status,
+      durationMs: elapsedMs(config),
+      // Only the status and the safe API message; the response body is never logged.
+      detail: status === 401 ? 'authentication required or token expired' : undefined,
+    })
+
+    if (status !== 401 || !config) {
       return Promise.reject(error)
     }
-
-    const config = error.config as RetryableRequestConfig
 
     if (config._retry || isAuthEndpoint(config.url)) {
       return Promise.reject(error)

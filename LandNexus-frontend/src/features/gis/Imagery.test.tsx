@@ -66,7 +66,7 @@ describe('ImageryStatusCard', () => {
     renderWithProviders(<ImageryStatusCard />, { auth: authWith(['GIS_READ']) })
 
     expect(await screen.findByRole('heading', { name: 'Satellite imagery' })).toBeInTheDocument()
-    expect(screen.getByText('Not enabled')).toBeInTheDocument()
+    expect(await screen.findByText('Not enabled')).toBeInTheDocument()
     expect(screen.getByText('ISRO Bhuvan')).toBeInTheDocument()
     expect(
       screen.getByText(/follow docs\/IMAGERY_SETUP\.md/),

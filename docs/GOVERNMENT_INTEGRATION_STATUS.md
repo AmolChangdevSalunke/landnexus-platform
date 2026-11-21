@@ -1,6 +1,7 @@
 # Government Integration Status
 
-**Last updated:** 15 November 2026  
+**Last updated:** 18 November 2026
+
 **Rule:** an integration is only called **LIVE** when a tested, configured connection to the government system exists. Nothing in this repository meets that bar today.
 
 | Integration | Current state | What exists in the repository | What is deliberately absent |
@@ -12,6 +13,7 @@
 | PFMS / DBT payment rail | **SIMULATED (LIMITED COMPENSATION FLOW)** | Existing compensation payments are explicitly simulated; outcomes can be simulated and confirmed payments have a protected text receipt. | No PFMS API, standalone DBT beneficiary/NPCI lifecycle, bank rail, real reconciliation or money movement. |
 | OpenStreetMap | **LIVE PUBLIC BASEMAP** | Leaflet map uses OSM tiles as the interactive fallback, with attribution. | OSM is not an authoritative land-record or government boundary source; tile availability depends on network access and OSM usage policy. |
 | ISRO Bhuvan imagery | **NOT VERIFIED / NOT CONNECTED** | Public Bhuvan API portal was reachable; optional imagery proxy reports connected only after a successful configured response; OSM remains active without it. | `BHUVAN_API_TOKEN` was unavailable in the local environment, so no authenticated request was made. No imagery endpoint/layer/CRS/licensing was verified. Do not display a connected claim without a successful live service check. |
+| ISRO Bhuvan LULC AOI and village lookup | **IMPLEMENTED, NOT LIVE-VERIFIED** | Backend-only adapter at `/api/v1/gis/bhuvan/*`, reusing existing GIS permissions, geographic scope, audit, PostGIS corridor data and CSV writing. LULC AOI accepts a current project corridor or a WKT Polygon/MultiPolygon and stores every attempt in `bhuvan_lulc_analyses` (V27), with history and CSV/PDF export. Village geocoding/reverse geocoding are enabled for the documented AP/KA states; Maharashtra is refused by default until an operator records a real successful check. | `BHUVAN_API_TOKEN` was still unavailable, so no authenticated LULC or village success is recorded. The provider's unauthenticated/refused path was verified: an invalid token returns HTTP 200 with `{"error":"invalid_token"}` and is reported as a provider authentication failure, never as data. LULC Maharashtra coverage is not claimed until a live AOI run succeeds; village Maharashtra coverage is not documented by Bhuvan. Tokens are backend-only and never returned or logged. |
 | Digital signatures | **NOT IMPLEMENTED** | Printable notices/awards only. | No DSC/eSign provider or signature verification. |
 | E-mail / SMS delivery | **OPTIONAL, GENERIC** | Outbox, retries and `none` / `log` / `http` providers. Default is `none`. | No tested vendor integration; `http` is a generic webhook. |
 

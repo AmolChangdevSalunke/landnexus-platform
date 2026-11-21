@@ -24,11 +24,14 @@ public class SlaScheduler {
 
     @Scheduled(initialDelayString = "${landnexus.sla.initial-delay-ms:300000}", fixedDelayString = "${landnexus.sla.scan-interval-ms:900000}")
     public void run() {
+        long started = System.nanoTime();
         try {
             ScanResult r = service.scanAsScheduler();
-            log.info("SLA scan: {} warnings, {} breaches, {} notifications", r.warningsRaised(), r.breachesRaised(), r.notificationsSent());
+            log.info("SLA scan: {} warnings, {} breaches, {} notifications ({} ms)",
+                    r.warningsRaised(), r.breachesRaised(), r.notificationsSent(),
+                    (System.nanoTime() - started) / 1_000_000L);
         } catch (RuntimeException e) {
-            log.error("SLA scan failed", e);
+            log.error("SLA scan failed after {} ms", (System.nanoTime() - started) / 1_000_000L, e);
         }
     }
 }

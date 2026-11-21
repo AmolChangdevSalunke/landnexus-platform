@@ -17,5 +17,5 @@ Important honesty notes
 - All data in demos and tests is synthetic and labelled DEMO. Do not load real personal or land data.
 - Payments are SIMULATED. There is no real PFMS/DBT connection and no bank details are stored.
 - Compensation numbers come only from approved rate cards and rule sets; the DEMO rule set is illustrative, not a real law.
-- No AI/ML/OCR is implemented. Maps are drawn from officer-entered GeoJSON; there is no satellite or Bhuvan integration.
+- No AI/ML/OCR is implemented. Maps are drawn from officer-entered GeoJSON. The optional imagery proxy and the Bhuvan LULC/village adapter are disabled or unverified by default; see `docs/GOVERNMENT_INTEGRATION_STATUS.md`.
 - See `docs/PROJECT_STATUS.md` for what is done and what is pending.

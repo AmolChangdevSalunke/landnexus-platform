@@ -1,6 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { createLogger } from '../../logging/logger'
 import { Button } from '../ui/Button'
+
+const log = createLogger('ui.error-boundary')
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -17,8 +20,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true }
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo): void {
-    // Do not log tokens or user data. The friendly fallback is enough here.
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Error messages and component stacks are safe; tokens and user data are not collected here.
+    log.error('Unhandled UI error', {
+      error,
+      detail: info.componentStack?.slice(0, 500),
+    })
   }
 
   render() {

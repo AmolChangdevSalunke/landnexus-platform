@@ -15,6 +15,7 @@ import { ProposalFormPage } from '../features/proposals/ProposalFormPage'
 import { ProposalListPage } from '../features/proposals/ProposalListPage'
 import { NotFoundPage } from '../features/shared/NotFoundPage'
 import { GisMapPage } from '../features/gis/GisMapPage'
+import { BhuvanAnalysisPage } from '../features/gis/BhuvanAnalysisPage'
 import { ConflictWorkspacePage } from '../features/gis/ConflictWorkspacePage'
 import { VillageParcelsPage } from '../features/gis/VillageParcelsPage'
 import { CaseDetailsPage } from '../features/acquisition/CaseDetailsPage'
@@ -132,6 +133,15 @@ export function AppRoutes() {
             element={
               <RequirePermission any={[PERMISSION.MASTER_DATA_READ]}>
                 <GisMapPage />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="gis/analysis"
+            element={
+              <RequirePermission any={[PERMISSION.GIS_READ]}>
+                <BhuvanAnalysisPage />
               </RequirePermission>
             }
           />

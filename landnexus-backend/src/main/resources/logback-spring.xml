@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Central Logback configuration for LandNexus.
+
+  Development (default, or the "dev" profile): human-readable Spring Boot-style console lines.
+  Production (the "prod" profile): the same console line plus a daily/size-rotated text file and a
+  structured JSON (JSON Lines) file. No logging dependency beyond the Logback that Spring Boot already
+  ships is used.
+
+  Output shape:
+  2026-11-18T23:43:10.125+05:30 INFO 14820 - - - [landnexus] [nio-8080-exec-1] [req-123] c.l.a.PropertyController : message
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="ROOT_LOG_LEVEL" source="landnexus.logging.level.root" defaultValue="INFO"/>
+    <springProperty scope="context" name="APP_LOG_LEVEL" source="landnexus.logging.level.app" defaultValue="INFO"/>
+    <springProperty scope="context" name="FRAMEWORK_LOG_LEVEL" source="landnexus.logging.level.framework" defaultValue="WARN"/>
+    <springProperty scope="context" name="SQL_LOG_LEVEL" source="landnexus.logging.level.sql" defaultValue="WARN"/>
+    <springProperty scope="context" name="LOG_FILE_DIR" source="landnexus.logging.file.dir" defaultValue="logs"/>
+    <springProperty scope="context" name="APP_ENV" source="landnexus.logging.environment" defaultValue="dev"/>
+
+    <!-- Spring Boot's default pattern, extended with the application name and the request/correlation id. -->
+    <property name="CONSOLE_LOG_PATTERN"
+              value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level ${PID:- } --- [landnexus] [%thread] [%X{requestId:-system}] %logger{36} : %msg%n%wEx"/>
+
+    <contextName>landnexus</contextName>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Shared level rules. Hibernate SQL is noisy and can contain parameter values, so keep it quiet by default. -->
+    <logger name="com.landnexus" level="${APP_LOG_LEVEL}"/>
+    <logger name="org.springframework" level="${FRAMEWORK_LOG_LEVEL}"/>
+    <logger name="org.hibernate" level="${SQL_LOG_LEVEL}"/>
+    <logger name="org.hibernate.SQL" level="${SQL_LOG_LEVEL}"/>
+    <logger name="org.hibernate.orm.jdbc.bind" level="${SQL_LOG_LEVEL}"/>
+    <logger name="com.zaxxer.hikari" level="${FRAMEWORK_LOG_LEVEL}"/>
+    <logger name="org.flywaydb" level="${ROOT_LOG_LEVEL}"/>
+
+    <springProfile name="prod">
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_FILE_DIR}/landnexus.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_FILE_DIR}/landnexus.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>2GB</totalSizeCap>
+                <cleanHistoryOnStart>true</cleanHistoryOnStart>
+            </rollingPolicy>
+            <encoder>
+                <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_FILE_DIR}/landnexus.jsonl</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_FILE_DIR}/landnexus.%d{yyyy-MM-dd}.%i.jsonl.gz</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+                <totalSizeCap>2GB</totalSizeCap>
+                <cleanHistoryOnStart>true</cleanHistoryOnStart>
+            </rollingPolicy>
+            <encoder class="com.landnexus.shared.logging.StructuredJsonEncoder">
+                <service>landnexus</service>
+                <environment>${APP_ENV}</environment>
+                <!-- Resolve "{}" placeholders so JSON consumers see the same message as the console. -->
+                <withFormattedMessage>true</withFormattedMessage>
+                <!-- StructuredJsonEncoder adds an ISO-8601 timestamp instead of the numeric epoch field. -->
+                <withTimestamp>false</withTimestamp>
+            </encoder>
+        </appender>
+
+        <root level="${ROOT_LOG_LEVEL}">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="JSON_FILE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!prod">
+        <root level="${ROOT_LOG_LEVEL}">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

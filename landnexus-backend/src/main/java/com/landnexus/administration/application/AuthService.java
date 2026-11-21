@@ -11,6 +11,7 @@ import com.landnexus.administration.infrastructure.RefreshTokenRepository;
 import com.landnexus.administration.infrastructure.UserAccountRepository;
 import com.landnexus.shared.audit.AuditService;
 import com.landnexus.shared.exception.AuthenticationFailedException;
+import com.landnexus.shared.logging.LogSanitizer;
 import com.landnexus.shared.security.ClientInfo;
 import com.landnexus.shared.security.JwtProperties;
 import com.landnexus.shared.security.JwtService;
@@ -22,6 +23,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     static final int MAX_FAILED_ATTEMPTS = 5;
     static final Duration LOCK_DURATION = Duration.ofMinutes(15);
@@ -107,6 +112,7 @@ public class AuthService {
         user.setLockedUntil(null);
         user.setLastLoginAt(now);
         loginHistory.save(LoginHistory.success(user.getId(), username, client, now));
+        log.info("Login succeeded for user {} from {}", user.getId(), clientAddress(client));
         return issueTokens(user, now);
     }
 
@@ -122,16 +128,20 @@ public class AuthService {
             refreshTokens.revokeAllForUser(owner.getId(), now);
             audit.recordAs(owner.getId(), owner.getUsername(), "TOKEN_REUSE_DETECTED", "UserAccount", owner.getId(),
                     "A used refresh token was presented again; all sessions were revoked");
+            log.warn("Refresh token reuse detected for user {}; all sessions revoked", owner.getId());
             throw new AuthenticationFailedException(BAD_REFRESH_TOKEN);
         }
         if (!stored.getExpiresAt().isAfter(now)) {
+            log.warn("Refresh token expired for user {}", stored.getUser().getId());
             throw new AuthenticationFailedException(BAD_REFRESH_TOKEN);
         }
         UserAccount user = stored.getUser();
         if (!user.isEnabled()) {
+            log.warn("Refresh token presented for disabled user {}", user.getId());
             throw new AuthenticationFailedException(BAD_REFRESH_TOKEN);
         }
         stored.setRevokedAt(now);
+        log.debug("Access token refreshed for user {}", user.getId());
         return issueTokens(user, now);
     }
 
@@ -142,6 +152,7 @@ public class AuthService {
         refreshTokens.findByTokenHash(TokenHasher.sha256(rawToken)).ifPresent(token -> {
             if (token.getRevokedAt() == null) {
                 token.setRevokedAt(now);
+                log.info("Logout completed; refresh token revoked for user {}", token.getUser().getId());
             }
         });
     }
@@ -156,7 +167,15 @@ public class AuthService {
     private AuthenticationFailedException failedLogin(UUID userId, String username, String reason,
                                                       ClientInfo client, Instant now) {
         loginHistory.save(LoginHistory.failure(userId, username, reason, client, now));
+        // The username is masked and the password/token is never available here.
+        log.warn("Login failed for user {} ({}) from {}", LogSanitizer.username(username), reason,
+                clientAddress(client));
         return new AuthenticationFailedException(BAD_CREDENTIALS);
+    }
+
+    private static String clientAddress(ClientInfo client) {
+        return client == null || client.ipAddress() == null || client.ipAddress().isBlank()
+                ? "unknown" : LogSanitizer.safe(client.ipAddress());
     }
 
     private void burnTime() {

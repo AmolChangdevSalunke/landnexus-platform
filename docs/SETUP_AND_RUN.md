@@ -80,7 +80,56 @@ Open http://localhost:5173. Keep this port: the backend only allows that origin 
 Quality checks: `npm run build` and `npm run test`.
 The GIS workspace uses the public OpenStreetMap tile service as its interactive fallback and requires network access to load tiles. Optional imagery settings are documented in `docs/IMAGERY_SETUP.md`; do not configure an unverified endpoint or label it connected unless its live check succeeds.
 
-## 8. See everything working: the end-to-end DEMO
+## 8. ISRO Bhuvan API access key (optional)
+The Bhuvan LULC/village integration is implemented in the backend (`/api/v1/gis/bhuvan/...`) and in the frontend
+GIS → Analysis page. It is **off by default** and no live Bhuvan success is claimed until you configure a real token.
+
+1. Request API access from ISRO/NRSC Bhuvan (the Bhuvan API portal or the Bhuvan office that issued your account).
+   The access key is account-specific; LandNexus cannot issue one and none is stored in the repository.
+2. Put the key in the **backend** environment only (never in `VITE_*`, browser storage, source code, screenshots or chat):
+```powershell
+$env:BHUVAN_API_TOKEN = "<your Bhuvan access key>"
+$env:LANDNEXUS_BHUVAN_ENABLED = "true"
+```
+3. Restart the backend. Verify the status endpoint after logging in with a GIS-enabled account:
+```powershell
+Invoke-RestMethod http://localhost:8080/api/v1/gis/bhuvan/status -Headers @{ Authorization = "Bearer <access-token>" }
+```
+`tokenConfigured` and `lulcAvailable` should be `true`; the token itself is never returned.
+4. Run the provider check (it calls Bhuvan but prints no token):
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify-bhuvan.ps1
+```
+5. Use **GIS → Analysis** in the frontend or `POST /api/v1/gis/bhuvan/lulc/aoi` with `{"projectId":"..."}` or a
+   WKT Polygon. Village geocoding is enabled only for Andhra Pradesh (AP) and Karnataka (KA) because those are the
+   states Bhuvan documents. Maharashtra is refused until a real successful Maharashtra check has been recorded and
+   `LANDNEXUS_BHUVAN_MAHARASHTRA_VILLAGE_VERIFIED=true` is set.
+
+Optional tuning: `LANDNEXUS_BHUVAN_BASE_URL`, `LANDNEXUS_BHUVAN_TIMEOUT_SECONDS`, `LANDNEXUS_BHUVAN_MAX_BYTES`,
+`LANDNEXUS_BHUVAN_VILLAGE_STATES=AP,KA`. On a `502 AUTHENTICATION_FAILED`, the key is invalid/expired or not enabled
+for that API; Bhuvan may report this as HTTP 200 with an `error` object. Never put the key in a query string you share.
+
+## 9. Logging
+The backend uses the SLF4J/Logback already supplied by Spring Boot. Configuration is centralized in
+`landnexus-backend/src/main/resources/logback-spring.xml`; every request gets an `X-Request-Id` (also returned in the
+response and shown in the logs). Development prints Spring Boot-style console lines. The `prod` profile
+(`SPRING_PROFILES_ACTIVE=prod`) additionally writes daily/size-rotated files under `logs/`:
+`landnexus.log` (text) and `landnexus.jsonl` (one JSON object per line), with 30-day / 2 GB caps.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LANDNEXUS_ENV` | `dev` | Environment label in JSON logs |
+| `LANDNEXUS_LOG_LEVEL_ROOT` | `INFO` | Root level |
+| `LANDNEXUS_LOG_LEVEL_APP` | `INFO` (`DEBUG` in the `dev` profile) | `com.landnexus` level |
+| `LANDNEXUS_LOG_LEVEL_FRAMEWORK` | `WARN` | Spring/Hikari level |
+| `LANDNEXUS_LOG_LEVEL_SQL` | `WARN` | Hibernate SQL level (keep quiet: bound values may be personal data) |
+| `LANDNEXUS_LOG_DIR` | `logs` | Production log directory |
+
+Use `LANDNEXUS_LOG_LEVEL_APP=DEBUG` for CRUD/business detail. Never log tokens, passwords, authorization headers or
+response bodies. The frontend logger is `LandNexus-frontend/src/logging/logger.ts`; it uses a matching console format
+in development, JSON at `WARN`+ in production, and can be tuned with `VITE_LOG_LEVEL` (`debug`, `info`, `warn`, `error`).
+
+## 10. See everything working: the end-to-end DEMO
 With the backend running (step 5), in a new window with the same `LANDNEXUS_ADMIN_*` variables:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\full-demo.ps1
@@ -90,14 +139,14 @@ simulated payments, R&R, GIS, dashboards, SLA) and prints PASS/FAIL for every st
 names and password of that run so you can log in to the frontend as, for example, the field officer or the competent authority.
 Those accounts are synthetic and local only. Re-running adds new DEMO data with a new random suffix (history and audit rows are append-only by design).
 
-## 9. Roles and administration in the demo
+## 11. Roles and administration in the demo
 The seed creates synthetic accounts for the supported roles. Use `-ShowCredentials` with the demo script to print that run's generated credentials; do not copy production credentials into source or documentation. The role permission matrix is at `/admin/roles`, user administration is at `/admin/users`, and proposal routing rule configuration is at `/admin/routing-rules`; each requires the corresponding backend permission. Users can edit account email/display name, roles and existing geographic scopes. Geographic user scopes currently stop at state/division/district; taluka/village permission inheritance is not implemented. Routing configuration does not provide named officer targets.
 
 MIS reports at `/monitoring/reports` use database views and support state, district, status, date, project and district-selected taluka filters. The main dashboard supports project/taluka/date filters and database-backed GIS conflict, pending-task, escalation-level and permission-gated officer workload aggregates. Dashboard status filtering/export is not implemented; district comparison and trend do not narrow by those dashboard filters. PFMS/DBT rail breakdowns remain unavailable until the payment schema records an explicit rail.
 
 Latest database verification (15 Nov 2026): the full backend suite passed 579 tests with Flyway through V25; focused user permission/authentication tests passed 55 tests; the demo script passed twice with 193 checks each; filtered dashboard and MIS values matched direct PostgreSQL queries for sampled aggregates. On 16 Nov, frontend tests passed 50 files/250 tests and production build exited successfully, and backend compile plus focused dashboard/role unit tests passed. V26 is present but has not yet been applied or verified against PostgreSQL because the isolated database settings were unavailable. Flyway applies V24-V26 on startup. Access-token validation checks the current user authorization version in PostgreSQL, so authenticated requests depend on database availability. See `docs/TESTING_AND_VERIFICATION.md` and `docs/FINAL_ACCEPTANCE_REPORT.md` for exact limits and counts.
 
-## 10. Troubleshooting
+## 12. Troubleshooting
 | Symptom | Cause and fix |
 |---|---|
 | `psql` is not recognised | add `C:\Program Files\PostgreSQL\18\bin` to `$env:Path` in that window |
@@ -109,10 +158,10 @@ Latest database verification (15 Nov 2026): the full backend suite passed 579 te
 | Flyway or PostGIS error at start | PostGIS is not installed for that PostgreSQL, or the DB user cannot create extensions |
 | An entry made between 00:00 and 05:30 IST rejects "today" | known limitation: business dates are validated in UTC |
 
-## 11. API and integrations
+## 13. API and integrations
 REST endpoints are rooted at `/api/v1`. The generated OpenAPI document is available at `http://localhost:8080/api/v1/meta/openapi.json`; the endpoint catalogue is in `docs/API_DOCUMENTATION.md`. Flyway migrations run on backend startup. Payments are simulated only; a standalone DBT/NPCI beneficiary workflow and real PFMS integration are not implemented. No live Bhuvan service is claimed; the GIS map uses OSM fallback tiles.
 
-## 12. Known limits (also in docs/PROJECT_STATUS.md)
+## 14. Known limits (also in docs/PROJECT_STATUS.md)
 Payments are simulated; payment-channel labels do not connect to PFMS/DBT or transfer funds; uploaded files are not virus-scanned or encrypted at rest; there is no rate limiting; and the SLA scheduler is off by default (`LANDNEXUS_SLA_SCHEDULER=true` turns it on, while the manual scan remains available). V25 authorization-version checks invalidate access tokens after user/role/permission changes. The demo does not implement every requested NLAMS acceptance criterion; see `docs/DEMO_READINESS.md` and `docs/KNOWN_ISSUES.md`.
 
 ## Linux notes
